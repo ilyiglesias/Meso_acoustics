@@ -1,0 +1,365 @@
+---
+title: "Read and visualize output from EV"
+output: html_notebook
+---
+
+# Objective of code 
+
+This code was written by II to: 
+- Load and view processed acoustic data exported from Echoview 
+- Calculate echo-integration metrics for each Interval (NASC, Center of Mass, etc.) 
+- Plot echograms for each individual day of survey 
+
+Note: These data lead into --> Spatial autocorrelation.Rmd
+
+# Background and Data Description
+
+These data are EK60/EK80 echosounder data collected from the core region of the RREA survey from 2013-2018 and have been filtered, processed, cleaned and exported from Echoview
+- Cleaning: impulse noise removal, attenuated signal removal, transient noise and background noise removal
+- False bottoms identified via algorithm and removed manually 
+- Bad data removal:for each 100m by 5m cell (mean Sv) I set the whole cell to bad data- no data if
+there was less than 75% coverage for a given cell (good data-what was left after processing/raw Sv file prior to processing /100 %) 
+- These data are from depths greater than 550m deep (bottom depth)
+- These data had a -75 dB threshold applied (prior to export, individual sample level (not per grid cell))
+- output is mean Sv (dB) data binned by 100m horizontal by 5m vertical cells EK60 data, 38 kHz from 150m to 525m.
+
+
+# Load libraries
+```{r load libraries, echo=FALSE}
+
+library(tidyverse) # all things
+library(lubridate) # dates
+library(sf) #spatial features
+
+```
+
+# Create list of .csv files to read into R: ALL years of data
+
+These will be read into R in next step
+```{r read in EV output}
+
+getwd() # current working directory 
+setwd('..') # would like to change the working directory to point to available data stored in parent folder EV_output
+
+# To read 500m_deeper data (100m by 5m output from EV for bottom depths greater than 550m):
+# tell directory where files are stored, below is all data in folder for all years
+filenames = list.files(path="./EV_output/75percentcoverage_75threshold/Deeper_550m", pattern=, full.names=TRUE)
+
+```
+
+Note: the above only reset the working directory while running the above chunk, and it is reset automatically- can safely ignore warning message
+
+# Read all Echoview output into R
+
+Note this is a lot of data (~4.5 million records), so a little slow
+
+```{r load files into R based on filenames, echo=FALSE}
+# remap working directory so R can access output files in parent folder
+setwd('..') 
+
+#create df with col for region, year and day of survey- based on filepath name
+output <- map_df(filenames, ~read_csv(.x, 
+                                      col_types = cols(.default = col_double(), #had to set column type default to avoid conflict error
+                                      Time_M=col_guess(), #this is a time value but guess does a good job
+                                      Process_ID=col_character()))%>% #except for 2 character cols Time_m and Process_ID
+                    mutate(filename=.x))%>% #create a column of filenames for each file
+                    mutate(Region=str_sub(filename, -8, -5))%>% #from file name, extract region information
+                    mutate(Year=str_sub(filename, -18, -15))%>% # extract year information from file names- new col
+                    mutate(Day=str_sub(filename, -13, -10))%>% # extract day information from our file names - new col
+                    dplyr::mutate(ID=row_number())%>% #create a col of unique values (row number) in case we need it later
+                    #mutate(coverage= (Good_samples/Samples_In_Domain)*100)%>% #percent coverage of a given cell- should all be higher than 75%
+                    dplyr::select(-filename)# remove filename col note need to ref package due to conflict with base R
+
+```
+
+NOTES:
+- Working directory only changed while running chunk, ignore warning
+- Parsing challenges caused the warning message for Process_ID and Time_M columns. However Process_ID is not important and Time_M parses to HMS which is great. for more on parsing:
+https://stackoverflow.com/questions/31568409/override-column-types-when-importing-data-using-readrread-csv-when-there-are
+- We created a new column for DAY here instead of using Date_M to correspond to the same file "days" we processed for a given "day" in Echoview (naming) given differences in local and GMT time (boat vs recorded time)
+
+# Check range of Sv values:
+
+```{r check range of data values r}
+range(output$Sv_mean)
+
+```
+The range of values is -999dB to -33.41 for 2013-2018 which is within the range we would expect
+From Echoview https://support.echoview.com/WebHelp/Reference/special_data_values.htm
+-999dB is the linear equivalent of 0 zero or no backscatter, so should be included! 
+
+# Convert from dB to linear domain
+NOTE: all arithmetic needs to be done in the LINEAR domain (sv not Sv) That is why input is Sv, but need to convert via 10^(Sv/10) 
+for reference:
+```{r convert between linear and dB domain }
+# convert from dB to linear
+db_to_linear <- function(db){ 10^ (db/10) 
+}
+# convert from linear to dB
+linear_to_db <- function(linear){ 10*log10(linear)
+}
+# Sv to sv- this doesn't look right! 
+Sv_to_sv <- function(Sv){ 10^ (sv/10) 
+}
+# sv to Sv
+sv_to_Sv <- function(sv){ 10*log10(sv)
+}
+```
+
+### Calculate acoustic metrics from fine resolution (100m horizontal by 5m vertical) bins!
+Note: I am only integrating in the vertical direction for now (100m horizontal bins here, but will need to re-bin after spatial autocorrelation analysis)
+Note: that for each day of the survey that we processed, there should be unique Interval (horizontal) and layer (vertical) bins.
+
+```{r Acoustic metrics}
+
+#####################################################
+#Acoustic Metrics
+# definitions from MacLennan et al 2002 and Sam Urmy et al 2012 (vertical metrics)
+#####################################################
+
+# Mean Sv - integrated over depths (150m-550m)
+Sv_mean_cell= function(Sv_z){
+ 10*log10(mean(10^(Sv_z/10)))
+}
+
+# Cell_H= height of cell (i.e. 5m)
+# Sv_Z= Sv at a given depth (ie mean Sv value exported from EV per 100m by 5m cell), at a given depth Depth_mean (mean depth over 5m vertical bin)
+# H= sum of all "Height_mean", sum of cell_H
+
+
+# sa (ABC) Area Backscattering Coefficient- MacLennan et al 2002 
+
+ABC <- function(Sv_z, cell_H){
+  sum(10^(Sv_z/10))*cell_H
+}
+# sum of all sv values--Urmy:depth_integral
+# cell_H= height of cell
+#note cell_H input is simply a value of 5m (not individual values or you get an error, could also use unique(Height_mean) to generalize it
+# Sv_Z= Sv at a given depth (ie mean Sv value exported from EV per 100m by 5m cell), at a given depth Depth_mean (mean depth over 5m vertical bin)
+# this is equivalent to the mean sv * total cell thickness (sv_mean*375)
+
+
+# Calculate NASC for water column 150m-525m
+# note this is equivalent to simply taking the sum of all NASC values per cell over our "region" 150-525m
+# This is also equal to: our ABC value multiplied by a scaling factor of 4pi (1852^2)- to make the surface area 1nmi squared
+
+NASC <- function(Sv_z, cell_H){
+ (sum(10^(Sv_z/10))*cell_H)* 4*pi*1852^2
+}
+
+# Sv_Z= Sv at a given depth (ie mean Sv value exported from EV per 100m by 5m cell), at a given depth is the equivalent of our function for ABC * scaling factor
+# cell_H= height of cell (5m)
+
+
+# Calculate NASC from taking the sum of cell nascs
+NASC_alt <- function(cell_NASC) {
+  sum(cell_NASC)
+}
+
+
+# Calculate Center of Mass (m)- integrated over 150m-550m
+CM <- function(z, Sv_z) {
+  sum(z*10^(Sv_z/10))/sum(10^(Sv_z/10))
+}
+
+# this is an average of depth weighted by sv (volume backscatter) - calculate in sv not Sv space (linear, not dB)
+# z is the depth of each of our cells with a given Sv value: input output$Depth_mean
+# Sv_Z= Sv at a given depth (ie mean Sv value exported from EV per 100m by 5m cell), at a given depth z
+
+
+```
+
+# Calculating our acoustics metrics for 100m horizontal bins (2013-2018) 
+Note: we calculate the total number of cells per water column here (n), and select for those columns of water with <10 cells missing data \This means at least 65 out of 75 cells (5m vertical cells, 150m-525m). NOTE: whem we later regrid, we omit this step since covering large geographic extent.
+
+
+```{r calculate acosutic metrics for a given year}
+
+# Calculate acoustic metrics
+echo_integration <-  output %>%
+                filter(Layer_depth_min>= 150 & # minimum depth of 150m
+                      Layer_depth_max<= 525) %>% #max depth of 525m (note this is depth of data, not bottom depth)
+               group_by(Year, Day, Interval, Lat_M, Lon_M)%>% #we would like to integrate each 100m horizontal, by 150m-525m water column region
+               summarise(
+                MVBS= Sv_mean_cell(Sv_z=Sv_mean), #Sv_mean 
+                sa= ABC(Sv_z  = Sv_mean, cell_H = 5), # Area backscattering coefficient, ABC, calculated cell-wise
+                sA= NASC(Sv_z = Sv_mean, cell_H = 5), #Nautical Area Scattering Coefficient, NASC, calculated cell-wise
+                sA_alt= NASC_alt(cell_NASC=NASC), # calc NASC as sum of NASC values
+                CM= CM(z=Depth_mean, Sv_z = Sv_mean),
+                Sd_Sv= sd(Sv_mean), #calculate the standard deviation of Sv per Interval (diff than EV output?)
+                Sd_NASC=sd(NASC), #calculate sd of NASC
+                Sd_ABC= sd(ABC), #calculate sd of ABC
+                n= n(), # count the number of cells (rows) per Interval-will use this to filter
+                .groups = "drop") %>%
+              mutate(ABC=10^(MVBS/10)*375)%>% #this is a check on our calculation the mean sv multiplied by total cell height 375m
+              mutate(Area_backscattering_strength= linear_to_db(linear=ABC))%>% # log (dB) version of sa (linear)
+              mutate(NASC=ABC* 4* pi* 1852^2) %>% #just a calculation check remove when satisfied
+              filter(n>= 65) # this selects for those intervals with at least ~87% coverage (allowing 10 cells out of 75 to be bad data, no data)
+
+```
+
+
+# Echo_integration for ALL data (without 10 cell filter)
+I just removed the last line of the code above which removed 100m water columns if more than 10 vertical cells were missing data
+This will also be used to calculate the total number of 100m cells per re-grided grid cell! (Regrid.Rmd)
+```{r without 10 cell maximum}
+echo_integration_all <-  output %>%
+                filter(Layer_depth_min>= 150 & # minimum depth of 150m
+                      Layer_depth_max<= 525) %>% #max depth of 525m (note this is depth of data, not bottom depth)
+               group_by(Year, Day, Interval, Lat_M, Lon_M)%>% #we would like to integrate each 100m horizontal, by 150m-525m water column region
+               summarise(
+                MVBS= Sv_mean_cell(Sv_z=Sv_mean), #Sv_mean 
+                sa= ABC(Sv_z  = Sv_mean, cell_H = 5), # Area backscattering coefficient, ABC, calculated cell-wise
+                sA= NASC(Sv_z = Sv_mean, cell_H = 5), #Nautical Area Scattering Coefficient, NASC, calculated cell-wise
+                sA_alt= NASC_alt(cell_NASC=NASC), # calc NASC as sum of NASC values
+                CM= CM(z=Depth_mean, Sv_z = Sv_mean),
+                Sd_Sv= sd(Sv_mean), #calculate the standard deviation of Sv per Interval (diff than EV output?)
+                Sd_NASC=sd(NASC), #calculate sd of NASC
+                Sd_ABC= sd(ABC), #calculate sd of ABC
+                n= n(), # count the number of cells (rows) per Interval-will use this to filter
+                .groups = "drop") %>%
+              mutate(ABC=10^(MVBS/10)*375)%>% #this is a check on our calculation the mean sv multiplied by total cell height 375m
+              mutate(Area_backscattering_strength= linear_to_db(linear=ABC))%>% # log (dB) version of sa (linear)
+              mutate(NASC=ABC* 4* pi* 1852^2) 
+
+# to facilitate plotting later, convert Year to year
+echo_integration_all = rename(echo_integration_all, year=Year)
+```
+
+
+# FOR LOOP: Create individual echogram of output for each unique day of the survey
+This is just for visual reference and quality control check
+
+```{r Echogram of meso depths with acoustic metrics for loop }
+
+# For each year
+yr= unique(output$Year) #vector of years
+
+#and day within year, plot an echogram and export file to folder with unique name 
+
+# select for a specific year (2013-2018)
+for (i in 1:length(yr)){
+
+    # filter all Sv output for year i  
+    yr_echo<- output %>%
+            filter(Year %in% yr[i])
+  
+    # filter all echo-integration results for year i
+    yr_int <- echo_integration %>%
+            filter(Year %in% yr[i])
+  
+  #create vector of unique days within a given year
+    day_yr= unique(yr_int$Day)
+  
+  #then for that year, iterate over each day
+  for (j in 1:length(day_yr)){
+  
+  #select Sv output for specific day within a given year
+    day_echo <- yr_echo %>% #from year df
+                  filter(Day %in% day_yr[j])%>% #select day
+                  filter(Layer_depth_min>= 150 & Layer_depth_max<= 525) # select for meso depths
+
+  # select echo-integration output for specific day within a given year 
+    day_int <- yr_int %>%
+                  filter(Day %in% day_yr[j]) #select day
+
+  # create plot for specific year and day within that year
+  ggplot()+
+    geom_tile(data= day_echo %>% #Sv df
+             filter(Sv_mean > -999)%>% #for dispaly purposes, only show values greater than 0 (-999 dB)
+             filter(Interval %in% day_int$Interval), #filer for those intervals that met our criteria for echointegration
+            aes(x=Interval, y=Layer_depth_min, fill=Sv_mean))+ #plot Sv per cell echogram background
+  scale_fill_viridis_c(direction=1)+ #note c denotes continuous variable, yellows-higher values
+  scale_y_reverse()+ #depth shallow to deep
+  geom_hline(yintercept=150, color="red", linewidth=1)+ #line for min depth
+  geom_hline(yintercept=525, color="red", linewidth=1)+ # line for max depth
+  geom_point(data=day_int, aes(x=Interval, y=CM), size=0.5, shape=3)+ #add points for center of mass
+  geom_point(data=day_int, aes(x=Interval, y=125, size=NASC, alpha=NASC), color="darkorange3", shape=21)+ #plot NASC lines over exisiting echogram- diff axis?
+  ggtitle(label=paste(yr[i], day_yr[j], "Echogram"))+
+  labs(x="Interval", y="Depth (m)", fill = "Sv_mean", color="white")+ #legend 
+  theme_classic() 
+  
+  # export plot with unique name
+  ggsave(filename=paste0("./echograms/", yr[i], day_yr[j], ".jpeg"))
+  }
+}
+#when done, remove intermediary objects
+rm(yr, day_echo, yr_int, day_int, day_yr, yr_echo, echo_integration_day, i, j)#remove iterative objects when all done 
+```
+
+
+# Remove functions and intermideate variables:
+leaving until I run spatial autocorrelation analysis 
+```{r remove metric calc values}
+rm(filenames, ABC, CM, db_to_linear, linear_to_db, NASC, NASC_alt, Sv_mean_cell, sv_to_Sv, Sv_to_sv)
+```
+
+# NEXT FILE.....
+Head to "spatial autocorrelation.Rmd" to determine the spatial extent at which we do longer have to worry about autocorrelation, then regrid via "regrid.Rmd"
+
+
+
+# Summary information
+The information below summarizes some simple values about our data: total km traversed, mean depth, etc.
+
+# Total km acoustics data by year
+```{r}
+#how many total 
+echo_integration_all |> 
+  group_by(year) |> 
+  summarize(no_cells=n(), km=(no_cells*100)/1000) #ea row is a cell, so total number of cells is just total number of rows
+  # no_cells: total number of 100m cells
+  # km= total kms mutliply the number of cells by 100m, then divide by 1000m to convert from meters to km
+
+# total number of km sampled: 3,442.4 km
+687.0	+ 703.3		+ 574.8		+ 598.8		+ 349.1		+529.4 # total of 3,442.4 km sampled 
+```
+# Depth of acoustics data
+```{r}
+# download NOAA bathymetry for our region of interest resolution =1 is the highest resolution available
+library(marmap) #watch out for overwritting of as.raster!
+bathy <- getNOAA.bathy(lon1 =-125 , lon2 = -121, lat1 = 35, lat2 = 39, resolution =  1 )
+plot(bathy)
+```
+# Extract bathy data for acoustic track
+```{r}
+# can view summary of data
+summary.bathy(bathy)
+
+# GET BATHY DATA for ALL collection trips:
+bathy_acoustic_track <- get.depth(bathy, x=echo_integration_all$Lon_M, y=echo_integration_all$Lat_M, locator = FALSE, distance=FALSE)
+
+# add depth info to existing dfs
+echo_integration_all$depth <- abs(bathy_acoustic_track$depth) #note depths were in negative values so using abs() to convert to positive
+
+```
+# Summary of depth info
+```{r}
+echo_integration_all |> 
+  group_by(year) |> 
+  summarise(mean_depth=mean(depth), no_days=length(unique(Day)))
+  
+#overall mean bottom depth
+(1535.335+	1492.853+ 1425.323+ 1505.317+ 1533.008+ 1633.758)/6 #1520 m
+```
+# Plot of acoustic track with depth info
+Just for reference
+```{r}
+library(marmap)
+library(ggOceanMaps)
+
+# Plot map of bathymetry data with acoustics overlay
+autoplot.bathy(bathy, geom=c("contour", "raster"), show.legend=F)+ #plot as contours and raster (also could use tile but creates white artifact)
+scale_fill_etopo()+
+#scale_fill_gradient2(low="dodgerblue", mid="gainsboro", high = "darkgreen")+ # color ramp
+geom_point(data=echo_integration_all, aes(x=Lon_M, y=Lat_M))+
+coord_sf(xlim = c(min(echo_integration_all$Lon_M-0.25), max(echo_integration_all$Lon_M+0.25)), ylim = c(min(echo_integration_all$Lat_M-0.25), max(echo_integration_all$Lat_M+0.25)))+
+  facet_wrap(~year)+
+  xlab("")+
+  ylab("")
+```
+
+
+
+
+
