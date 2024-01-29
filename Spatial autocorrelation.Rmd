@@ -1,0 +1,271 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Objective of code
+
+I initially exported data in 100m horizontal by 5m vertical bins. At these distances, there is a substantial amount of spatial autocorrelation in Sv which would violate assumptions of independence for statistical analysis. We can alternatively think of this as "patch" size. This code includes a method to quantify the extent of spatial auto-correlation and provides a value to re-grid our data by (that is at an appropriate, non-correlated scale, allowing for stat analysis to proceed). 
+
+# Background 
+Moran's I: measures degree of association of single variable with itself at different points in space as a function of distance between points (called a spatial lag). I am interested in calculating a Moran's I value for our acoustic biomass data to see whether biomass is autocorrelated and if so, at what scale. Based on this distance, I can create bigger echo-integration units (at range where no longer correlated). 
+
+#load libraries
+```{r}
+library(tidyverse) #data wrangling plotting
+library(ncf) # correlograms
+```
+
+# Calculate correlograms
+The following code creates a correlogram (Moran's I) for each year of our survey separately using as input the 100m horizontal, echointegrated grid-cell values. 
+
+NOTE: resample: I used a resample value of 500 (run time is long and didn't seem to vary with input of 999)
+NOTE: z value: currently using MVBS
+NOTE: increment: 1 km
+
+Value in output from https://www.rdocumentation.org/packages/ncf/versions/1.3-2/topics/correlog:
+$x.intercept: the x-intercept is the distance at which object are no more similar than that expected by-chance-alone across the region (ie independent)
+$p: p-value (significance of correlation): if non-significant, can also say no different than random distribution
+$correlation: Moran's value
+
+# INPUT: 100m horizontal grid cells 
+```{r create correlog and plot for each year 100m grid }
+
+yr=c("2013", "2014", "2015", "2016", "2017", "2018") # going to iterate over each year in our study
+
+corr_output <- list() #create an object to store corelogram output to
+  
+for (i in 1: length(yr)){
+  
+    #select for survey year
+    yr_echo <- echo_integration %>%
+                 filter(Year %in% yr[i])
+    
+    print(yr[i]) #print year
+    
+    #Calculate Morans I correlogram for individual year- MVBS
+    yr_corr <- ncf::correlog(x=yr_echo$Lon_M, y=yr_echo$Lat_M, z=yr_echo$MVBS, increment=1, resamp=500, latlon = TRUE)
+    
+    # store output iteratively
+    corr_output[[i]] <- yr_corr
+    
+    #print x.intercept value- where first crosses the 0 line: ie when no spatial correlation
+    print(yr_corr$x.intercept)
+    # print p-values, see when hits non-significant?
+    print(yr_corr$p)
+    # open graphics device (pdf?)
+    pdf(paste0("./plots/correlograms/corr_100m_", yr[i], ".pdf"))
+    # plot of correlogram per year
+
+{plot(yr_corr, ylim=c(-1,1), xlim=c(0,65), xaxp=c(0,50,50), xlab="Distance (km)", ylab="Moran's I")
+abline(h=0) #create zero line
+abline(v=yr_corr$x.intercept, col="#D55E00" ) #plot vertical line at x-intercept
+abline(v=min(which(yr_corr$p>=0.05)), col="#0072B2" ) #vertical line where p-value >0.05
+text(x=yr_corr$x.intercept+4.5, y=0.5, paste0("x-intercept:", round(yr_corr$x.intercept, 2)), cex=1.25, col="#D55E00" )
+text(x=min(which(yr_corr$p>=0.05))+3.5, y=0.75, paste0("p-value:", round(yr_corr$p[min(which(yr_corr$p>=0.05))],2)), cex=1.25, col="#0072B2")}
+
+    # save correlogram
+    dev.off()
+    
+}
+
+# remove intermediary objects
+rm(i, yr, yr_corr, yr_echo)
+```
+Note: colors chosen from Okabe-Ito color palette (color-blind friendly)
+https://stackoverflow.com/questions/57153428/r-plot-color-combinations-that-are-colorblind-accessible
+
+palette.colors(palette=="Okabe-Ito") 
+
+vermillion "#D55E00" 
+orange "#E69F00"
+yellow "#F0E442" 
+skyblue "#56B4E9"
+black "#000000"
+blue "#0072B2"
+reddishpurple "#CC79A7" 
+gray "#999999" 
+
+# Calculating range over multiple years: what is our appropriate regrid distance?
+Now that we have our correlogram output, I would like to calculate a numerical value to regrid by
+```{r estimating range}
+
+# xintercept for each year
+corr_output[[1]]$x.intercept # 2013 x.intercept 19.30433 
+corr_output[[2]]$x.intercept # 2014 x.intercept 21.08738
+corr_output[[3]]$x.intercept # 2015 x.intercept 17.15684 
+corr_output[[4]]$x.intercept # 2016 x.intercept 58.88189  
+corr_output[[5]]$x.intercept # 2017 x.intercept 20.02932 
+corr_output[[6]]$x.intercept # 2018 x.intercept 26.05613
+
+# distance at minimum p
+min(which(corr_output[[1]]$p>=0.05)) # 2013 distance where p-value crossed: 15
+min(which(corr_output[[2]]$p>=0.05)) # 2014 distance where p-value crossed: 30
+min(which(corr_output[[3]]$p>=0.05)) # 2015 distance where p-value crossed: 16
+min(which(corr_output[[4]]$p>=0.05)) # 2016 distance where p-value crossed: 62
+min(which(corr_output[[5]]$p>=0.05)) # 2017 distance where p-value crossed: 70
+min(which(corr_output[[6]]$p>=0.05)) # 2018 distance where p-value crossed: 28
+
+# Mean minimum distance of correlation (x.intercept or p-value, whichever came first!)
+
+distances <- c(15, 21.08738, 16, 58.88189, 20.02932, 26.05613) #2013-2018 x.intercept or dist where p-value >=0.5
+mean(distances) # 26.18
+median(distances) # 20.55
+
+# correlation value (Moran's I) less than 0.05 (ie really close to zero) for reference:
+min(which(corr_output[[1]]$correlation<0.05)) #2013: 11
+min(which(corr_output[[2]]$correlation<0.05)) #2014: 17
+min(which(corr_output[[3]]$correlation<0.05)) #2015: 14
+min(which(corr_output[[4]]$correlation<0.05)) #2016: 58
+min(which(corr_output[[5]]$correlation<0.05)) #2017: 20
+min(which(corr_output[[6]]$correlation<0.05)) #2018: 26
+
+sum(11, 17, 14, 58, 20, 26)/6 #24.3km
+```
+CONCLUSIONS: based on all of the information above, an appropriate scale for regridding is 25km! 
+
+For part 1 of the analysis (a comparison of biomass between years), I am going to explore the influence of scale by re-gridding all of our data by: 5km, 10km, 15km, 20km and 25km and comparing resutls (spoiler: they are consistent across spatial scales which is good; robust!) 5km, 10km, 20km, 25km
+
+For part 2 of the analysis: regrid acoustics data by everything by 25km, recalculate acoustic metrics and then examine the relationship of deep scattering layer depth to oceanographic variables (as measured via CTD) by extracting CTD variables within these 25km cells. 
+
+
+NOTES: In the previous iteration of this code Old_Acoustics_Analysis: I also calculated correlograms for center of mass depth (even greater distances if ~50km I beleive at Jarrods request) and CTD variables (surface temp for ex) as Jerome's request (small range, erratic results). In both cases, we can say that we conducted the analysis properly, but it didn't seem to conflict with our value of 25km based on horizontal spatial MVBS, so I am sticking with the analysis above. (but see old code if need values)
+
+
+NEXT.... move to regridding.Rmd to regrid our acoustics data into different bin sizes 
+
+
+# TODO: calculate a GLOBAL moran's I on data
+This was Jarrod's suggestion, but I can return to this after I re-grid everything...
+essentially, this single value represents whether there is overall structuring in the data, rather than structuring at specific distances (lags)-local
+https://cran.r-project.org/web/packages/lctools/vignettes/SpatialAutocorrelation.html
+
+# REFERENCE: re-running correlograms for re-gridded data
+this is for re-calculating correlograms with rebinned data. Note that this is just for reference and there appears to be two different chunks for accomplishing this, would have to check which is best.
+
+# FOR LOOP: create correlogram for each survey year--- INPUT: REGRIDDED DATA!!!
+NOTE: think about resample options (currently set to 500 - reasonable but SLOWWWWW)
+
+Value in output from https://www.rdocumentation.org/packages/ncf/versions/1.3-2/topics/correlog:
+$x.intercept: the x-intercept is the distance at which object are no more similar than that expected by-chance-alone across the region (ie independent)
+$p: p-value (significance of correlation): if non-signficant, can also say no different than random distriubtion
+$correlation: Moran's value
+
+The following code is intended to take as input: regridded acoustics data (acoustics_regrid df) which will have varying distances of grid cell size depending on the dist= argument (starting with 5km)
+(this was updated from the original version which took echo_integration data as input, now that i am trying to update with regridded data)
+```{r create correlog for each year}
+
+
+yr=c("2013", "2014", "2015", "2016", "2017", "2018") # going to iterate over each year in our study
+
+corr_output_1km_regrid <- list() #create an object to store corelogram output to
+  
+for (i in 1: length(yr)){
+  
+    #select for survey year
+    yr_echo <- acoustics_regrid |>  # acoustics data regridded
+                 filter(year %in% yr[i])
+    
+    print(yr[i]) #print year
+    
+    #Calculate Morans I correlogram for individual year- MVBS
+    yr_corr <- ncf::correlog(x=yr_echo$lat, y=yr_echo$lon, z=yr_echo$MVBS, increment=1, resamp=500, latlon = TRUE)
+    
+    # store output iteratively
+    corr_output_5km_regrid[[i]] <- yr_corr
+    
+    #print x.intercept value- where first crosses the 0 line: ie when no spatial correlation
+    print(yr_corr$x.intercept)
+    # print p-values, see when hits non-significant?
+    print(yr_corr$p)
+    # open graphics device (pdf?)
+    pdf(paste0("./plots/correlograms/acoustics/corr_re500_1km_rebin_", dist , yr[i], ".pdf"))
+    # plot of correlogram per year
+
+{plot(yr_corr, ylim=c(-1,1), xlim=c(0,50), xaxp=c(0,50,50), xlab="Distance (km)", ylab="Moran's I")
+abline(h=0) #create zero line
+abline(v=yr_corr$x.intercept, col="firebrick") #plot vertical line at x-intercept
+abline(v=min(which(yr_corr$p>=0.05)), col="chocolate") #vertical line where p-value >0.05
+text(x=yr_corr$x.intercept+4.5, y=0.5, paste0("x-intercept:", round(yr_corr$x.intercept, 2)), cex=0.75, col="firebrick")
+text(x=min(which(yr_corr$p>=0.05))+3.5, y=0.75, paste0("p-value:", round(yr_corr$p[min(which(yr_corr$p>=0.05))],2)), cex=0.75, col="chocolate")}
+
+    # save correlogram
+    dev.off()
+    
+}
+
+#clean up when done running
+    rm(yr, i, yr_corr, yr_echo)
+```
+
+# SPatial autocorrelation with different grid cell sizes?!!
+The goal is to re-run our spatial correlograms with data that has been re-binned by: 5, 10, 15, 20 and 25km 
+```{r re-run correlograms }
+
+# IMPORTANT: due to some unknown complications with rstudio notebooks, I have to copy and paste the following code directly into the console
+
+yr=c("2013", "2014", "2015", "2016", "2017", "2018") # going to iterate over each year in our study
+
+corr_output <- list() #create an object to store corelogram output to
+  
+for (i in 1: length(yr)){
+  
+    #select for survey year
+    yr_echo <- echo_integration %>%
+                 filter(Year %in% yr[i])
+    
+    print(yr[i]) #print year
+    
+    #Calculate Morans I correlogram for individual year- MVBS
+    yr_corr <- ncf::correlog(x=yr_echo$Lon_M, y=yr_echo$Lat_M, z=yr_echo$MVBS, increment=1, resamp=500, latlon = TRUE)
+    
+    # store output iteratively
+    corr_output[[i]] <- yr_corr
+    
+    #print x.intercept value- where first crosses the 0 line: ie when no spatial correlation
+    print(yr_corr$x.intercept)
+    # print p-values, see when hits non-significant?
+    print(yr_corr$p)
+    # open graphics device (pdf?)
+    pdf(paste0("./plots/correlograms/acoustics/corr_re500_", yr[i], ".pdf"))
+    # plot of correlogram per year
+
+{plot(yr_corr, ylim=c(-1,1), xlim=c(0,50), xaxp=c(0,50,50), xlab="Distance (km)", ylab="Moran's I")
+abline(h=0) #create zero line
+abline(v=yr_corr$x.intercept, col="firebrick") #plot vertical line at x-intercept
+abline(v=min(which(yr_corr$p>=0.05)), col="chocolate") #vertical line where p-value >0.05
+text(x=yr_corr$x.intercept+4.5, y=0.5, paste0("x-intercept:", round(yr_corr$x.intercept, 2)), cex=0.75, col="firebrick")
+text(x=min(which(yr_corr$p>=0.05))+3.5, y=0.75, paste0("p-value:", round(yr_corr$p[min(which(yr_corr$p>=0.05))],2)), cex=0.75, col="chocolate")}
+
+    # save correlogram
+    dev.off()
+    
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
