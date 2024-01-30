@@ -1,0 +1,699 @@
+---
+title: "Regridding acoustic data following spatial autocorrelation analysis"
+output: html_notebook
+---
+
+### Background: 
+Because our data were collected continuously while underway at sea, and because marine organisms are often grouped in space and time according to ecological drivers, there is some spatial autocorrelation present in our data. This causes problems in terms of analysis, because our samples are not independent (which violates the assumptions of most statistical tests).
+
+In Spatial autocorrelation.Rmd we created correlograms with our mesopelagic depth integrated values (echo_integration df) of 100m horizontal cells (<10 missing vertical cells) and found spatial autocorrelation within our data at approximately ~25km.
+
+From the spatial autocorrelation analysis, a grid size of 25km would be appropriate for acoustic track data (in other words, at 25km, we should no longer have strong spatial autocorrelation in our data and our observations should represent a spatially independent sample). If we re-grid on this scale, the thought is that we would no longer be violating the assumptions of independence in our samples and can proceed with our statistical analysis. However, if we still see a strong spatial pattern in our residuals (both year comparison via kruskall wallis and GAM), may still need to include a spatial component. 
+
+# Load libraries
+```{r load packages}
+library(sf) # dealing with spatial data
+library(raster) # regridding
+library(tidyverse)#data wrangle and plotting
+```
+
+A note on geographic coordinate systems: in order to create a spatial grid of a specific distance value (for ex. 5km), I can either keep my inputs in latitude longitude and try to convert our distances into degrees latitude and longitude, OR, convert from Lat Long geographic coordinate system into a projected coordinate system, create the grid of known size (for example UTM ZOne 19N for the core region of California, in meters), and then re-export in degrees latitude longitude (which is what I opted for because it felt more accurate but way more work).
+
+NOTE: although I initially only integrate over water columns 100m horizontal with a maximum of 10 missing cells (ie 65 out of 75m at meso depths), I chose not to do so when we regridded over a larger area because any one area missing backscatter data will likely be compensated by surrounding values and when I looked at the individual echograms created in Read_clean, there didn't appear to be any regions of concern (ie where missing just DSL depths which might otherwise bias results). 
+
+# ADD columns to output df for calculating acoustic metrics
+Because we are using the df: output which is our 100m by 5m vertical grid data output from echoview, we need to calculate acoustic metrics from these data (otherwise taking the mean of means from echo_integration 150-525m felt inaccurate). To calculate the MVBS we need the linear mean of Sv (sv) (so convert from Sv (log scale) to sv (linear) and take mean and then re-convert) using the following conversions:
+
+Sv to sv: Sv_to_sv <- function(Sv){10^(sv/10)}
+sv to Sv: sv_to_Sv <- function(sv){10*log10(sv)}
+
+# Add columns for calculating acoustic metrics
+We only want to run this code at the outset of analysis, no need to run for each grid cell size, so added eval=FALSE
+```{r, eval=FALSE}
+
+# add columns for enabling calculation of acoustic metrics
+output <- output |> 
+          mutate(MVBS_linear= 10^(Sv_mean/10)) |>  #convert Sv to sv (log to linear scale)
+          mutate(sv_z=MVBS_linear*Depth_mean) |> # create col for sv * depth (for calculating CM)
+          mutate(sv_cellht=MVBS_linear*5) #create additional column for sv * cell height (for calculating NASC)
+
+```
+NOTE: because I am now calculating these acoustic metrics over a much bigger region (instead of individual 100m column of water, 1km, 5km etc) I am no longer going to select for water columns with less than 10 cells missing because this will be averaged over a larger region! To verify this, I looked at the individual echograms from Read clean and I didn't see too many errant values (tho i only calculated CM for those with at least 65 cells (<10 cells missing- the echograms that is) but generally I think it will be okay. (Jarrod also confirmed that this makes sense-not eliminating data from those columns with >10 cells missing when integrating over such a broad area)
+
+For ref: in case we later wanted to assign quality control: In total, there were ~400 records of 30,000 that had less than 65 cells out of 75 vertically (between 150-525m)
+# create list of values missing more than 10 cells 
+output_remove <- output |> 
+                group_by(Year, Day, Interval, Lat_M, Lon_M) |> #group by a specific water column of water, include lat long data
+                summarize(n=n(), .groups = "drop") |> 
+                filter(n<65)
+
+### Create a grid based on acoustic data extent (specific grid size) 
+
+Use the output df (100m by 5m vertical cells) to set the extent and resolution of acoustic data 
+
+```{r create raster grid based on acoustics extent}
+
+# create ONE grid for all years- can vary size of grid with dist input
+dist= 25000 # this value is in meters (so 5km = 5000m)
+
+# Convert acoustic data to an sf object------and then convert to projected coordinate system
+output_sf <- st_as_sf(x=output, coords=c('Lon_M','Lat_M'), remove = FALSE, crs=4326) #native GCS wgs84
+output_sf <- st_transform(output_sf, crs=32610)# Convert to projected coordinate system (UTM Zone 10N, datum: WGS84)
+st_crs(output_sf) # check that projected properly
+
+# Create a Raster grid using acoustics extent and set resolution size ------
+ext <- raster::extent(output_sf) #lat lon extent 
+r <- raster::raster(ext=ext, crs=32610) # create a raster feature with the extent of our acoustics data and with our projected coord system UTM Zone 10N
+# change the dim of our raster to match dist input (value in meters):
+res(r) <- c(dist, dist) # The units of UTM Zone 10N are meters (m) so 25km is 25,000m 
+```
+
+# Regrid acoustics data to raster grid (of set distance, dist), based on acoustics extent-- Calculate MVBS
+-----------------------------------------------------------------------------------
+
+```{r regrid acoustics to this raster grid}
+
+# create df to store output
+acoustics_regrid_utm <- data.frame()
+
+# select for a specific year?!!! And our mesopelagic depths: FOR LOOP IT?! 
+
+yr= unique(output$Year)
+
+for(i in 1:length(yr)){
+  #filter for given year
+  echo_yr <- output_sf |> 
+             filter(Year==yr[i]) |> 
+             filter(Layer_depth_min>=150 & Layer_depth_max<=525) #select for meso depths
+
+  
+# rasterize acoustic output (sv mean) to our grid created above with resolution set by (dist=) input
+  x_yr<- raster::rasterize(x=echo_yr, y=r, field=echo_yr$MVBS_linear, fun=function(x, ...) c(length(x),mean(x))) # of cells (vertical?) and mean
+#convert layer.2 (MVBS) values to dB space (from linear)
+  values(x_yr$layer.2) <- 10*log10(values(x_yr$layer.2))
+
+# convert raster output to dataframe object
+x_yr_df<- raster::as.data.frame(x=x_yr, xy=TRUE, centroids=TRUE, na.rm=TRUE) 
+x_yr_df <- x_yr_df |> 
+  rename(lon=x, lat=y, count=layer.1, MVBS=layer.2) |>  #rename col names
+  mutate(year=yr[i]) #add a column with year 
+  
+# store output in df
+acoustics_regrid_utm <- rbind(acoustics_regrid_utm, x_yr_df)
+#will reconvert back to WGS 84 in a later step
+  
+}
+
+# remove intermediary steps: 
+rm(echo_yr, x_yr, x_yr_df, i, yr)
+
+```
+
+# Convert output from projected to cooridnate reference system (UTM Zone10N to Lat Lon)
+--------------------------------------------------------------------------------------
+Using output from acoustics_regrid_utm
+crs=4326
+```{r}
+
+# CONVERT regridded acoustics output from dataframe to SF object, then from UTM Zone 10N back to WGS 84 
+
+acoustics_regrid_sf <- st_as_sf(x=acoustics_regrid_utm, coords=c('lon','lat'), remove = FALSE, crs=32610) #since coord currently in UTM zone 10N
+
+acoustics_regrid_sf_wgs <- st_transform(acoustics_regrid_sf, crs=4326)# Convert to projected coordinate system (UTM Zone 10N, datum: WGS84)
+st_crs(acoustics_regrid_sf_wgs) # check that projected properly
+
+
+
+#col for geometry
+acoustics_regrid_sf_wgs <- acoustics_regrid_sf_wgs %>%
+          mutate(lon = unlist(map(acoustics_regrid_sf_wgs$geometry,1)), #create col for longitude from old proj
+                 lat = unlist(map(acoustics_regrid_sf_wgs$geometry,2))) #c# create separate columns for geometry 
+
+#store final output
+acoustics_regrid= as.data.frame(acoustics_regrid_sf_wgs) |> 
+                  dplyr::select(-geometry) 
+
+rm(acoustics_regrid_utm) #remove initial output from regrid
+```
+# Create gridlines based on acoustic regrid output!
+---------------------------------------------------
+For selecting by specific grid cell and plotting purposes we need actual values for upper and lower boundaries of each cell
+We can adjust these to changing distance bins with (dist=) input
+
+```{r create gridlines of varying distance based on acoustic regrid output }
+
+# Convert to regular dataframe
+acoustics_regrid_utm= st_drop_geometry(acoustics_regrid_sf)
+acoustics_regrid_utm= as.data.frame(acoustics_regrid_utm)
+
+# select for unique cells (because some cells are listed multiple times because all 6 years included)
+
+grid= acoustics_regrid_utm |> 
+      distinct(lat, lon) 
+
+grid= grid |> 
+      mutate(cell=seq(1, nrow(grid), 1))
+
+
+#save grid values: either side of centroid values 
+grid= grid |> #this is in the UTM Zone 10N projection
+      mutate(lon_grid_low=lon-(dist/2), lat_grid_low=lat-(dist/2)) |>  #new col with centroid value minus half grid cell distance
+      mutate(lon_grid_hi=lon+(dist/2), lat_grid_hi=lat+(dist/2))
+
+# HI: convert grid df to sf feature so i can output coordinates -- note have to do this twice because 4 cols and only accepts two?
+grid_hi <- grid |> 
+           dplyr::select(cell, lon_grid_hi, lat_grid_hi)
+grid_hi_sf<- sf::st_as_sf(x=grid_hi, coords=c('lon_grid_hi','lat_grid_hi'), remove = FALSE, crs=32610)# in projected UTM
+# convert from UTM zone 10N to WGS 84
+grid_hi_sf_wgs <- st_transform(grid_hi_sf, crs=4326) # convert coordinate system back into non-projected WGS84 
+#check that projected
+st_crs(grid_hi_sf_wgs) # converted back to lat long in WGS84
+# break geometry column into two columns 
+grid_hi_sf_wgs <- grid_hi_sf_wgs %>%
+                      mutate(lon_grid_hi = unlist(map(grid_hi_sf_wgs$geometry,1)), #create col for longitude from old proj
+                      lat_grid_hi = unlist(map(grid_hi_sf_wgs$geometry,2))) #col for latitude from old col of projected lat
+
+
+# repeat for low
+grid_low <- grid |> 
+           dplyr::select( cell, lon_grid_low, lat_grid_low)
+grid_low_sf<- sf::st_as_sf(x=grid_low, coords=c('lon_grid_low','lat_grid_low'), remove = FALSE, crs=32610)
+# convert from UTM zone 10N to WGS 84
+grid_low_sf_wgs <- st_transform(grid_low_sf, crs=4326) # convert coordinate system back into non-projected WGS84 
+st_crs(grid_low_sf_wgs) # converted back to lat long in WGS84
+# break geometry column into two columns 
+grid_low_sf_wgs <- grid_low_sf_wgs %>%
+                      mutate(lon_grid_low = unlist(map(grid_low_sf_wgs$geometry,1)), #create col for longitude from old proj
+                      lat_grid_low = unlist(map(grid_low_sf_wgs$geometry,2))) #col for latitude from old col of projected lat
+
+
+# Repeat for lat lon cooridantes (so we can merge with acoustics_regrid output )
+grid_latlon <- grid |> 
+           dplyr::select(cell, lon, lat)
+grid_latlon_sf<- sf::st_as_sf(x=grid_latlon, coords=c('lon','lat'), remove = FALSE, crs=32610)
+# convert from UTM zone 10N to WGS 84
+grid_latlon_sf_wgs <- st_transform(grid_latlon_sf, crs=4326) # convert coordinate system back into non-projected WGS84 
+
+# break geometry column into two columns 
+grid_latlon_sf_wgs <- grid_latlon_sf_wgs %>%
+                      mutate(lon = unlist(map(grid_latlon_sf_wgs$geometry,1)), #create col for longitude from old proj
+                      lat = unlist(map(grid_latlon_sf_wgs$geometry,2))) #col for latitude from old col of projected lat
+
+# convert from sf to dataframe
+
+grid_hi_sf_wgs <- as.data.frame(st_drop_geometry(grid_hi_sf_wgs))
+grid_low_sf_wgs <- as.data.frame(st_drop_geometry(grid_low_sf_wgs))
+grid_latlon_sf_wgs <- as.data.frame(st_drop_geometry(grid_latlon_sf_wgs))
+
+# left join
+grid= left_join(grid_latlon_sf_wgs, grid_low_sf_wgs, by="cell")
+  
+grid= (left_join(grid, grid_hi_sf_wgs, by="cell"))   
+  
+grid=relocate(grid, cell, lon, lon_grid_low, lon_grid_hi, lat, lat_grid_low, lat_grid_hi)
+
+
+#remove intermediary files
+rm(grid_hi, grid_hi_sf, grid_hi_sf_wgs, grid_low, grid_low_sf, grid_low_sf_wgs ) #final 
+# and when all done:
+rm(acoustics_regrid_sf, acoustics_regrid_sf_wgs, acoustics_regrid_utm, grid_latlon, grid_latlon_sf, grid_latlon_sf_wgs)
+
+
+```
+
+# Merge gridlines to acoustic regridded output
+
+our output of the acoustic regridding (resolution determined by dist= input) and merging our upper and lower lat long values 
+
+```{r add gridline values to regridded acoustic output}
+acoustics_regrid
+acoustics_regrid= left_join(acoustics_regrid, grid, by=c("lat", "lon"))
+```
+HOORAY!!! we now have nice clean gridlines and cell values for each of our acoustic regridded data which will help facilitate joining to ctd data later
+
+### Calculate additional acoustic metrics to regrided output: Center of Mass (CM)
+
+# Calculate Center of Mass (m)- integrated over 150m-550m
+CM <- function(z, Sv_z) {
+  sum(z*10^(Sv_z/10))/sum(10^(Sv_z/10))
+}
+
+- Whereas we were able to apply neat little functions to our output df to calculate additional acoustic metrics, with the rasterize function in the {raster} package, we are only allowed input for ONE variable. The workaround is to calculate intermediary steps as an additional column which we then sum over to regrid at different distances. 
+
+I added a column sv_z: mutate(sv_z=MVBS_linear*Depth_mean) to the output df
+
+
+Center of mass is thus calculated as: 
+sum(z*10^(Sv_z/10))/sum(10^(Sv_z/10)) 
+
+I first created a col for sv (converting Sv db into sv linear) "MVBS_linear"
+THEN, I calculated a new column called "sv_z" which is the product of sv (linear) multiplied by the mean depth per cell
+then using the sum(x) function, I first calculate the sum of sv_z (numerator) and then in a separate raster, sum of sv (MVBS_Linear)
+- Next, I export both rasters (convert to dataframe) and create a new column for sum(sv_z)/sum(sv) to calculate CM (m)
+Also a good check on grid export consistency- should have same centroid values in diff exports!
+
+# Calculate CM for regrid 
+Calculate the sum of sv (linear) this is our denominator 
+```{r CM : sum of sv}
+
+# FOR LOOP: generate CM output - try to calculate at same time?
+yr= unique(output$Year)
+#yr=2013
+
+# create df to store output in
+sv_sum <- data.frame()
+
+for(i in 1:length(yr)){
+  #filter for given year
+  echo_yr <- output |> 
+             filter(Year==yr[i]) |> #select for one year at a time
+             filter(Layer_depth_min>=150 & Layer_depth_max<=525) #select for meso depths
+  
+  # convert to sf object
+  echo_yr_sf <- st_as_sf(x=echo_yr, coords=c('Lon_M','Lat_M'), remove = FALSE, crs=4326) #sf object with lat lon coord system
+  echo_yr_sf <- st_transform(echo_yr_sf, crs=32610)# Convert to projected coordinate system (UTM Zone 10N, datum: WGS84) to match raster r
+  
+  # rasterize this vector of acoustics to our grid (r) created previously (of distance dist=)
+  x_yr<- raster::rasterize(x=echo_yr_sf, y=r, field=echo_yr_sf$MVBS_linear, fun=function(x,...)sum(x)) #transfer vector to raster  
+
+# convert raster output to dataframe object
+x_yr_df<- raster::as.data.frame(x=x_yr, xy=TRUE, centroids=TRUE, na.rm=TRUE) 
+x_yr_df <- x_yr_df |> 
+  rename(lon=x, lat=y, sv_sum=layer) |> #rename col names sum of sv: sv_sum
+  mutate(year=yr[i]) #create col for year 
+
+
+# store output to df
+sv_sum <- rbind(sv_sum, x_yr_df)
+}
+
+
+
+# note this output sv_sum is in UTM Zone 10N- convert back to WGS 84: LAT LON coordinate reference system
+sv_sum_sf <- st_as_sf(x=sv_sum, coords=c('lon','lat'), remove = FALSE, crs=32610) # convert to SF object with UTM Zone 10N
+sv_sum_sf <- st_transform(sv_sum_sf, crs=4326)# Convert back to WGS 84 (Lon Lat)
+
+# break geometry column into two columns for lon and lat
+sv_sum_sf <- sv_sum_sf %>%
+                      mutate(lon = unlist(map(sv_sum_sf$geometry,1)), #create col for longitude from old proj
+                      lat = unlist(map(sv_sum_sf$geometry,2))) #col for latitude from old col of projected lat
+
+
+# convert from sf back to  dataframe
+sv_sum <- as.data.frame(st_drop_geometry(sv_sum_sf))
+
+#remove intermediary dfs
+#rm(echo_yr, echo_yr_sf, x_yr, x_yr_df, sv_sum_sf)
+rm(sv_sum_sf)
+```
+# CM step 2: Calculate and regrid numerator of CM 
+This is the sum of the product of sv * mean depth per cell
+
+```{r CM : step twp sum of sv_z}
+
+
+
+# FOR LOOP: generate CM output - try to calculate at same time?
+yr= unique(output$Year)
+#yr=2013
+
+# create df to store output in
+sv_z_sum <- data.frame()
+
+for(i in 1:length(yr)){
+  #filter for given year
+  echo_yr <- output |> 
+             filter(Year==yr[i]) |> #select for one year at a time
+             filter(Layer_depth_min>=150 & Layer_depth_max<=525) #select for meso depths
+  
+  # convert to sf object- convert coordinate system
+  echo_yr_sf <- st_as_sf(x=echo_yr, coords=c('Lon_M','Lat_M'), remove = FALSE, crs=4326)# convert to sf object in native coordsystem WGS84
+  echo_yr_sf <- st_transform(echo_yr_sf, crs=32610)# Convert to projected coordinate system (UTM Zone 10N, datum: WGS84) to match raster r
+  
+  # rasterize this vector again our general grid create above
+  x_yr<- raster::rasterize(x=echo_yr_sf, y=r, field=echo_yr_sf$sv_z, fun=function(x,...)sum(x)) #transfer vector to raster  
+
+# convert raster output to dataframe object
+x_yr_df<- raster::as.data.frame(x=x_yr, xy=TRUE, centroids=TRUE, na.rm=TRUE) 
+x_yr_df <- x_yr_df |> 
+  rename(lon=x, lat=y, sv_z_sum=layer) |>  #rename col names
+  mutate(year=yr[i])
+# store output 
+
+sv_z_sum <- rbind(sv_z_sum, x_yr_df)
+
+
+
+  
+}
+
+# note this output sv_z_sum is in UTM Zone 10N- convert back to WGS 84: LAT LON coordinate reference system
+sv_z_sum_sf <- st_as_sf(x=sv_z_sum, coords=c('lon','lat'), remove = FALSE, crs=32610) # convert to SF object with UTM Zone 10N
+sv_z_sum_sf <- st_transform(sv_z_sum_sf, crs=4326) # Convert coordinate system back to WGS 84 (Lon Lat)
+
+# break geometry column into two columns for lon and lat
+sv_z_sum_sf <- sv_z_sum_sf %>%
+                      mutate(lon = unlist(map(sv_z_sum_sf$geometry,1)), #create col for longitude from old proj
+                      lat = unlist(map(sv_z_sum_sf$geometry,2))) #col for latitude from old col of projected lat
+
+
+# convert from sf back to  dataframe
+sv_z_sum <- as.data.frame(st_drop_geometry(sv_z_sum_sf))
+
+#remove intermediary dfs
+rm(echo_yr, echo_yr_sf, x_yr, x_yr_df, sv_z_sum_sf)
+
+```
+
+# Merge these two variables (sv_z_sum and sv_sum) for each grid cell by dividing sum(sv*z)/sum(sv)
+
+Need to group by YEAR and join
+```{r}
+# whew, both lat and lon values are the same- check that same grid values
+identical(sv_sum$lat, sv_z_sum$lat)
+
+# join column from sv_z_sum to sv_sum
+cm <- left_join(sv_sum, sv_z_sum, by=c("lat", "lon", "year"))
+
+cm <- cm |> 
+  mutate(cm_m=sv_z_sum/sv_sum) |> 
+  dplyr::select(-c(sv_sum, sv_z_sum))
+
+# Add CM to our gridded MVBS and cell grid dataframe "acoustics_regrid"
+
+acoustics_regrid <- left_join(acoustics_regrid, cm, by=c("lat", "lon", "year"))
+
+rm(cm, sv_z_sum, sv_sum) #remove intermediary dfs
+```
+# Calculate NASC from vertical 5m binned data for regridded cells- calculate two ways as a check:
+1. sum of NASC in output df and 2. sv*cell height summed multiplied by 4*pi(1852^2)
+using the new column we calculated for sv_cellht (which is SV converted to sv (linear: MVBS_linear) multiplied by our cell height of 5m)
+
+```{r NASC method 1 sum of nasc}
+# create df to store output
+NASC_output <- data.frame()
+
+# select for a specific year
+
+yr= unique(output$Year) # for each year of the survey...
+
+for(i in 1:length(yr)){
+  #filter for given year
+  echo_yr <- output |> 
+             filter(Year==yr[i]) |> 
+             filter(Layer_depth_min>=150 & Layer_depth_max<=525) #meso depths since this is all output 
+  
+  # convert to sf object
+  echo_yr_sf <- st_as_sf(x=echo_yr, coords=c('Lon_M','Lat_M'), remove = FALSE, crs=4326)
+  echo_yr_sf <- st_transform(echo_yr_sf, crs=32610)# Convert to projected coordinate system (UTM Zone 10N, datum: WGS84) to match raster r
+  
+  # rasterize this vector again our general grid create above- note raster same as other previous values
+  x_yr<- raster::rasterize(x=echo_yr_sf, y=r, field=echo_yr_sf$NASC, fun=function(x, ...) sum(x)) #calculate sum of NASC per cell
+
+# convert raster output to dataframe object
+x_yr_df<- raster::as.data.frame(x=x_yr, xy=TRUE, centroids=TRUE, na.rm=TRUE) 
+x_yr_df <- x_yr_df |> 
+  rename(lon=x, lat=y, NASC=layer) |>  #rename col names
+  mutate(year=yr[i]) #create a col for yr
+
+# store output in df
+
+NASC_output <- rbind(NASC_output, x_yr_df)
+
+
+
+}
+
+
+# note this output sv_z_sum is in UTM Zone 10N- convert back to WGS 84: LAT LON coordinate reference system
+NASC_output_sf <- st_as_sf(x=NASC_output, coords=c('lon','lat'), remove = FALSE, crs=32610) # convert to SF object with UTM Zone 10N
+NASC_output_sf <- st_transform(NASC_output_sf, crs=4326) # Convert coordinate system back to WGS 84 (Lon Lat)
+
+# break geometry column into two columns for lon and lat
+NASC_output_sf <- NASC_output_sf %>%
+                      mutate(lon = unlist(map(NASC_output_sf$geometry,1)), #create col for longitude from old proj
+                      lat = unlist(map(NASC_output_sf$geometry,2))) #col for latitude from old col of projected lat
+
+
+# convert from sf back to  dataframe
+NASC_output <- as.data.frame(st_drop_geometry(NASC_output_sf))
+
+#remove intermediary dfs
+rm(echo_yr, echo_yr_sf, x_yr, x_yr_df, NASC_output_sf)
+```
+
+# Calculate gridded NASC
+method 2: 
+NASC <- function(Sv_z, cell_H){
+ (sum(10^(Sv_z/10))*cell_H)* 4*pi*1852^2
+}
+NOTE: i also calculated NASC using the formula above but got 156 obs instead of 135, although values were the same, so going to go with the simple addition of all NASC values and not worry about additional calculation 
+x_yr<- raster::rasterize(x=echo_yr_sf, y=r, field=echo_yr_sf$sv_cellht, fun=function(x, ...) sum(x)*4*pi*1852^2) #calculate sum of NASC per cell
+NOTE: because NASC is an integration I think it is less robust to missing values. Not planning to use this, but it is here for reference! 
+
+# ADD NASC to our existing output
+Add NASC to exisitng datframe acoustics_regrid df
+
+```{r}
+
+# Add CM to our gridded MVBS and cell grid dataframe "acoustics_regrid"
+
+acoustics_regrid <- left_join(acoustics_regrid, NASC_output, by=c("lat", "lon", "year"))
+
+rm(NASC_output) #remove intermediary dfs
+```
+
+NOTE: when we calculate NASC we aren't taking into account that there are some missing cells. For this reason I prefer to use MVBS as our acoustic metric
+
+# Finally, calculate the total number of 100m horiztonal columns of water per grid cell.....
+
+The following uses our echointegrated df echo_integration_all which calculated acoustic metrics for each 100m horizontal water column of water from 150m to 525m. Unlike its original version, echo_integration which selected for only those water columsn with less than 10 cells missing per 100m (so at least 65 out of 75 cells per water column,) this version has ALL of the data even if only a few values were available per water columns. Because we are regridding to much larger grid cell sizes (1km, 5km, 10km and 20km), I don't think I need to have such a strict value for echo integrating over these larger grid cells, but the output in echo_integration_all may be a little wonky (another reason why I am interseted in looking at it). I am going to regrid these data to the same grid as our other layers whic hwas developed from the original raw output df (which makes sense as that is now consistent with these data)
+
+```{r}
+# add a column to echo_integration_all for sv (ie convert from dB Sv to linear sv)
+echo_integration_all<-  echo_integration_all |> 
+                        mutate(MVBS_linear= 10^(MVBS/10)) #convert Sv to sv (log to linear scale)
+
+  
+# create df to store output
+echo_integration_regrid <- data.frame()
+
+# select for a specific year?!!! And our mesopelagic depths: FOR LOOP IT?! 
+
+yr= unique(echo_integration_all$year)
+
+for(i in 1:length(yr)){
+  
+  #filter for given year + meso depths 
+  echo_yr <- echo_integration_all |> 
+             filter(year==yr[i])
+
+  
+  # convert to sf object
+  echo_yr_sf <- st_as_sf(x=echo_yr, coords=c('Lon_M','Lat_M'), remove = FALSE, crs=4326) #convert to sf object with WGS84 native coordsys
+  echo_yr_sf <- st_transform(echo_yr_sf, crs=32610)# Convert to projected coordinate system (UTM Zone 10N, datum: WGS84) to match raster r  
+
+# rasterize acoustic output (sv mean) to our grid created above with resolution set by (dist=) input
+  x_yr<- raster::rasterize(x=echo_yr_sf, y=r, field=echo_yr_sf$MVBS_linear, fun=function(x, ...) c(length(x),mean(x))) 
+  
+  
+#convert layer.2 (MVBS) values to dB space (from linear)
+  values(x_yr$layer.2) <- 10*log10(values(x_yr$layer.2))
+
+# convert raster output to dataframe object
+x_yr_df<- raster::as.data.frame(x=x_yr, xy=TRUE, centroids=TRUE, na.rm=TRUE) 
+x_yr_df <- x_yr_df |> 
+  rename(lon=x, lat=y, echo_count=layer.1, echo_MVBS=layer.2) |>  #rename col names
+  mutate(year=yr[i]) #add a column with year 
+  
+
+# store output in df
+echo_integration_regrid <- rbind(echo_integration_regrid, x_yr_df)
+#will reconvert back to WGS 84 in a later step
+  
+}
+
+# Convert output back into WGS84 lat lon coordinate system
+
+echo_integration_regrid_sf <- st_as_sf(x=echo_integration_regrid, coords=c('lon','lat'), remove = FALSE, crs=32610) # convert to SF object with UTM Zone 10N
+echo_integration_regrid_sf <- st_transform(echo_integration_regrid_sf, crs=4326) # Convert coordinate system back to WGS 84 (Lon Lat)
+
+# break geometry column into two columns for lon and lat
+echo_integration_regrid_sf <- echo_integration_regrid_sf %>%
+                      mutate(lon = unlist(map(echo_integration_regrid_sf$geometry,1)), #create col for longitude from old proj
+                      lat = unlist(map(echo_integration_regrid_sf$geometry,2))) #col for latitude from old col of projected lat
+
+
+# convert from sf back to  dataframe
+echo_integration_regrid <- as.data.frame(st_drop_geometry(echo_integration_regrid_sf))
+
+
+# remove intermediarty steps: 
+#rm(echo_yr, x_yr, x_yr_df, echo_integration_regrid_sf, echo_yr_sf)
+
+```
+
+# Join this final output to our acoustics_regrid output for other acoustic metrics and grid
+
+```{r}
+acoustics_regrid= left_join(acoustics_regrid, echo_integration_regrid, by=c("lon", "lat", "year"))
+
+rm(echo_yr, x_yr, x_yr_df, echo_integration_regrid_sf, echo_yr_sf, echo_integration_regrid)
+
+```
+
+# PLOT 
+
+# Add basemap
+ # Create a simple state outline baselayer
+Only need to do this once and can ignore
+Note basemap data stored in parent folder "Basemaps" so need to change working directory for one chunk...
+```{r create simple state basemap, results='hide'}
+# Create simple state basemap from .shp of Census bureau
+# state layer from US Census bureau
+# https://www.census.gov/geo/maps-data/data/cbf/cbf_state.html
+
+getwd() # current working directory /Acoustics_Analysis
+setwd('..') # change wd to all of our available data stored in parent folder EV_output (folder: basemaps)
+
+states<- st_read(dsn = "./Basemaps/cb_2017_us_state_20m/cb_2017_us_state_20m.shp") # load the shape file with {sf}
+ # note that these data are stored in our wd
+states= st_transform(states, crs= 4326) # transform the data from NAD 83 to WGS 84
+st_crs(states) # check that coordinates were transformed
+
+#simple plot of Ca for ref
+ggplot()+
+  geom_sf(data=states)+
+  coord_sf(xlim =c(-125, -117) , ylim=c(32, 42))
+
+```
+
+# PLOT: regridded acoustics data
+```{r}
+{ggplot(data=acoustics_regrid)+
+  geom_point(aes(x=lon, y=lat, fill=MVBS), size=4, shape=22)+
+  geom_text(aes(x=lon, y=lat, label=echo_count), size=2)+
+  scale_fill_viridis_c(alpha=0.7)+
+  geom_sf(data=states)+ #add basemap not good one
+  coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39 ))+ #this is based on extent(r) raster but not UTM projection?
+  #scale_x_continuous(breaks = acoustics_regrid$lon_grid_low, minor_breaks = NULL)+
+  #scale_y_continuous(breaks=acoustics_regrid$lat_grid_hi, minor_breaks = NULL)+
+  xlab("")+
+  ylab("")+
+  ggtitle(label= paste0("Regridded MVBS, ", round(dist, 2), " m"))+
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        #panel.grid = element_line(colour = "black", linetype = "solid"),
+        panel.background = element_blank())+
+  facet_wrap(~year)}
+
+#ggsave(filename=paste0("./plots/regrid/regrid_", dist, "m", "_MVBS.pdf"))
+
+```
+NOTE that at this fine resolution there are some cells with only 1 100m horiztonal water column that are defining the whole 25km cell. Will probably have to come up with a way to filter in these situations?! (echo_count) is the col name. Hmmmm
+
+
+Also note that for all the work it took to use the primary, output df to re-calcualte all of these acoustics metrics, they appear to be the same as the mean of means (eye roll) echo_MVBS
+
+# PLOT regridded acoustics output with gridlines
+```{r}
+# plot in ggplot (using gridlines set up for generalized raster with ALL years)
+ggplot(data=acoustics_regrid)+
+  geom_point(aes(x=lon, y=lat, fill=MVBS), size=4.5, shape=22)+
+  scale_fill_viridis_c()+
+  geom_sf(data=states)+ #add basemap not good one
+  coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39 ))+ #this is based on extent(r) raster 
+  scale_x_continuous(breaks = acoustics_regrid$lon_grid_low, minor_breaks = NULL)+
+  scale_y_continuous(breaks=acoustics_regrid$lat_grid_hi, minor_breaks = NULL)+
+  xlab("")+
+  ylab("")+
+  ggtitle(label= "Regridded acoustics")+
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        panel.grid = element_line(colour = "black", linetype = "solid"),
+        panel.background = element_blank())+
+  facet_wrap(~year)
+
+#save output
+ggsave(paste0("./plots/regrid/acoustics_regrid_", "", dist, ".pdf"))
+```
+
+# compare amount of data between years?
+```{r}
+# calculate number of filled grid cells per 
+acoustics_regrid |> 
+  group_by(year) |> 
+  summarise(total_vertical=sum(count), total_horizontal=sum(echo_count), total_cells=n(), .groups = "drop")
+```
+NOTE: for 25km, the total number of 25 by 25km cells is pretty similar: 23, 23, 25, 24, 18, 22
+(although this doesn't include an additional filter for those 25km cells with less than 3 100m cells.)
+
+# compare amount of data between cells?
+```{r}
+# calculate number of filled grid cells per 
+acoustics_regrid |> 
+  group_by(year, cell) |> 
+  summarise(total_vertical=sum(count), total_horizontal=sum(echo_count), total_cells=n(), .groups="drop")
+```
+
+TODO: even with 25km, there are some cells that are represented by only a single 100m horizontal cell. I should probbly come up with a way to filter these prior to analysis.
+
+
+
+# MANUAL STEP: save output to specific grid size! 
+Because I am re-gridding multiple times but don't want to change all of hte code above each time (only have to change the dist= input at the moment), I am saving each regrid output by cell size
+
+```{r}
+acoustics_regrid_25km= acoustics_regrid
+```
+
+Now re-run all of the code above but for the following grid sizes
+1km
+5km
+10km
+15km
+20km
+25km
+
+
+# PLOT for visual reference
+NOTE: use the specific acoustics_regrid_size df to plot accurately
+
+```{r}
+# plot in ggplot (using gridlines set up for generalized raster with ALL years)
+ggplot(data=acoustics_regrid)+
+  geom_point(aes(x=lon, y=lat, fill=MVBS), size=3, shape=22)+
+  scale_fill_viridis_c()+
+  geom_sf(data=states)+ #add basemap not good one
+  coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39 ))+ #this is based on extent(r) raster 
+  scale_x_continuous(breaks = round(acoustics_regrid$lon_grid_low, 2), minor_breaks = NULL)+
+  scale_y_continuous(breaks= round(acoustics_regrid$lat_grid_hi, 2), minor_breaks = NULL)+
+  xlab("")+
+  ylab("")+
+  ggtitle(label= "Regridded acoustics")+
+  theme(axis.text.x = element_text(angle = 90),
+        panel.grid = element_line(colour = "black", linetype = "solid"),
+        panel.background = element_blank())+
+  facet_wrap(~year)
+
+#save output
+#ggsave(paste0("./plots/regrid/acoustics_regrid_", "", dist, ".pdf"))
+
+```
+
+
+
+
+# clean up objects
+```{r}
+rm(acoustics_regrid, ext, grid, i, yr)
+```
+NOTE: leave df: r we will use this to re-grid oceanographic data from ctd in Ocean regrid.Rmd
+# NEXT.....
+Head to Analysis 1.Rmd (difference in biomass between years)
+
+
+
+
+
+
