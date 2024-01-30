@@ -8,5 +8,7 @@ This project includes code to :
 - conduct a spatial autocorrelation analysis (Spatial autocorrelation.Rmd)
 - regrid to spatially independent grid cell size (Regrid.Rmd)
 - compare acoustic backscatter and center of mass depth between years (Analysis 1.Rmd)
-- extract CTD and satellite oceanographic data
-- build a generalized additive model to explore the effect of ocean conditions on center of mass depth
+- extract CTD and satellite oceanographic data (Ocean data.Rmd, satellite.Rmd)
+- regrid ocean data (Ocean regrid.Rmd)
+- build a generalized additive model to explore the effect of ocean conditions on center of mass depth (Analysis 2.Rmd)
+- plot oceanographic differences between years (Analysis 2 plots.Rmd)

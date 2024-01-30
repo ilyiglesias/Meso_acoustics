@@ -1,0 +1,893 @@
+---
+title: "Loading cleaning CTD data from RREA"
+output: html_notebook
+---
+
+# Summary
+This project was created to load CTD data from the RREA survey and to select those data corresponding to our acoustic tracks. These data will then be used to determine which environmental drivers might be responsible for affecting the acoustic Center of Mass (M) depth. Latest update April 2023
+
+### Data storage:
+CTD data stored in ctd_data folder. I re-exported the tables I needed (dbo_CTD_CAST.txt and dbo_CTD_HEADER.txt) from an updated version of the RREA database (juv_cruise_backup27JAN21.mdb) that I copied from Keith Sakuma. 
+
+### TO DO: last update May 6th, 2023 (aboard RV Shimada)
+- re-run all code and edit as I go (while also updating written methods document)-- all of the variables are up to date and accurate to the best of my knowledge! I am going to re-run all of the code below to ensure that everything works smoothly (i previously added dynamic height data later, so smoothing out any kinks as needed). After running this .Rmd document, the next script is satellite.Rmd (for light data along our acoustic track)
+
+The following code 
+- interested in variables at depths: 150m, MEAN center of mass depth (m) for all CM cells, 500m 
+- include variable for depth at which O2 becomes 0.05ml/l??
+- Dynamic height at 500m (anomalies)-- also need to verify that these fall within 3 std dev of mean
+- Depth of 26th Isopycnal
+- Depth of 0.5ml.l oxygen
+- Light: extract satellite data
+
+From CTD (measured variables): extract at 150m (top of mesopelagic zone), 500m (max CTD depth, close to max acoustic depth), and the mean center of mass depth for all cells (in all years) - as an estimate of conditions within the mesopealgic but without the potential introduction of a bias due to depth if we were to extract exact CM depth as I originally did. 
+
+# Measured variables- CTD
+-Dissolved Oxygen: 150m, mean CM depth, 500m
+-Chlorophyll: smoothed (2m above and below), depth integrated upper 100m
+-Temperature: 150m, mean CM depth, 500m
+-Density (prob correlated to temp which I prefer)
+Avoiding salinity because correlated to density and diffiuclt to explain as a driver of depth whereas at least density could be explained potentailly through buoyancy effects. 
+-Dyanamic height anomalies at 500m (mean of 2013-2018)- and remove those outside 3 std deviations of mean (outliers, measurement error) 
+
+# Derived variables- CTD
+-Depth at which DO reaches biological limit (0.05 ml/l)
+-Mixed layer depth (or buoyancy frequency)?! Still not sure about this one...difficult to calculate
+-Spice along the 26.0 isopycnal (an indication of water mass)
+
+
+NOTES analysis:
+- response variable= Center of Mass (m), so biologically I need to think about which variables might affect the depth of mesopealgic organisms.
+
+
+# The following code was created to:
+- load CTD data (metadata (ctd_header) + vertical profile data (ctd_cast))- and clean and link these tables
+- select for CTD stations that recorded data to 500m
+- select for physical variables of interest
+- calculate various metrics of interest: depth at low ox concentration for ex.
+- analyze spatial structuring (autocorrelation) in temperature-- this is just for ref
+
+Then switch to Oceano regrid.Rmd to regrid CTD data by re-gridded acoutics data cells
+...and then satellite.Rmd for light data from MODIS satellite
+
+# Load libraries:
+```{r, echo=FALSE}
+library(tidyverse) # data manipulation, plotting
+library(lubridate) #dates
+library(sf)# mapping
+library(oce) # visualizing and calculating values from profiles
+library(ggoce)
+#library(devtools) #to install ggoce
+#install_github("https://github.com/paleolimbot/ggoce") # adding isopycnals to ggplot
+#install.packages("ggOceanMaps") # needed for ggoce
+#library(ggOceanMaps)
+library(ggthemes)
+```
+
+# Plot acoustic tracks
+We can create a simple plot of the location of our acoustic backscatter data from the echo_integration data Lat and Lon data which represents the center point of each 100m horizontal water column (from 150m-525m) of data. Note that this is prior to re-gridding into 25 by 25km grid cells which we will recalculate from the output df
+
+```{r plot acoustic tracks}
+
+ggplot()+
+  geom_sf(data=states, fill="grey", color="black")+# plot state background
+  geom_point(data = echo_integration, aes(x=Lon_M, y=Lat_M, color=MVBS), size=2, shape= 21)+ #Plot location of cruisetracks
+  cmocean::scale_color_cmocean(name="thermal")+ #color scale
+  coord_sf(xlim = c(min(echo_integration$Lon_M-0.25), max(echo_integration$Lon_M+0.25)), ylim = c(min(echo_integration$Lat_M-0.25), max(echo_integration$Lat_M+0.25)))+ # adjust coord to min and max coord this is our "zoom"
+  theme(panel.background = element_blank(), 
+        #plot.background = element_blank(), #removes background of plot area
+        legend.key = element_blank(),
+        axis.text.x = element_text(angle=90))+ #remove grey around symbols in legend
+  labs(x="Longitude", y="Latitude", fill = "Sv from RREA survey")+ #legend
+  guides(fill = guide_colorbar(reverse=T))+ # reverse continuous variable legend so deeper at bottom
+  facet_wrap(~Year)
+
+ggsave("./plots/mvbs_acoustic_track.pdf")
+```
+
+```{r plot acoustic tracks CM}
+
+ggplot()+
+  geom_sf(data=states, fill="grey", color="black")+# plot state background
+  geom_point(data = echo_integration, aes(x=Lon_M, y=Lat_M, color=CM), size=2, shape= 21)+ #Plot location of cruisetracks
+  cmocean::scale_color_cmocean(name="deep")+ #color scale
+  coord_sf(xlim = c(min(echo_integration$Lon_M-0.25), max(echo_integration$Lon_M+0.25)), ylim = c(min(echo_integration$Lat_M-0.25), max(echo_integration$Lat_M+0.25)))+ # adjust coord to min and max coord this is our "zoom"
+  theme(panel.background = element_blank(), 
+        #plot.background = element_blank(), #removes background of plot area
+        legend.key = element_blank(),
+        axis.text.x = element_text(angle=90))+ #remove grey around symbols in legend
+  labs(x="Longitude", y="Latitude", fill = "Sv from RREA survey")+ #legend
+  guides(fill = guide_colorbar(reverse=T))+ # reverse continuous variable legend so deeper at bottom
+  facet_wrap(~Year)
+
+ggsave("./plots/cm_acoustic_track.pdf")
+```
+
+# Plot acoustic tracks- colored by year 
+The following plots were created for each year of the survey and each day is colored seperately 
+Overall the coverage is comparable, but 2017 certainly has less coverage than the other years in our study.
+```{r}
+ggplot()+
+  geom_sf(data=states, fill="grey", color="black")+# plot state background
+  geom_point(data=echo_integration, aes(x=Lon_M, y=Lat_M, color=as.factor(Year)), show.legend = FALSE)+
+  scale_color_viridis_d()+
+  coord_sf(xlim = c(min(echo_integration$Lon_M-0.25), max(echo_integration$Lon_M+0.25)), ylim = c(min(echo_integration$Lat_M-0.25), max(echo_integration$Lat_M+0.25)))+ # adjust coord to min and max coord this is our "zoom"
+  facet_wrap(~Year)+
+  xlab("Longitude")+
+  ylab("Latitude")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90))
+  
+
+ggsave("./plots/cruise_tracks_acoustics.pdf")
+```
+# Load CTD data from RREA survey into R  
+
+NOTE: Current version as of 8/15/22: juv_cruise_backup27JAN21 (from Keith)
+
+To export files from Access databases (by table):
+Open by dble clicking at left (to view file, ensure correct one), Rclick at left ex. dbo_CTD_HEADER//export//text file//delimited// check box for include field names on first row (column names) - comma separated and stored in a new folder I just created "data"
+Note that dbo_CTD_CAST is a HUGE file!! (This one contains the actual vertical oceanographic info)
+
+*will need to use work PC to access new version of .Access and export (Access not available on my Mac)- did this on NOAA PC laptop
+
+```{r load CTD files}
+
+# Read ctd header info (ctd metadata)
+ctd_header <- read.csv(file="./ctd_data/dbo_CTD_HEADER.txt", header = TRUE, sep=",", stringsAsFactors = FALSE)
+#add stringsAsFactors=FALSE to solve later error in utf-8
+
+# load CTD cast info (vertical oceanographic data)
+ctd_cast <- read.csv(file="./ctd_data/dbo_CTD_CAST.txt", header = TRUE, sep=",", stringsAsFactors = FALSE)
+
+# load station information-- here just for reference in case missing lat lon, but shouldn't otherwise need it
+#ctd_stations<- read.csv(file="./data/stations.csv", header = TRUE, sep=",", stringsAsFactors = FALSE)
+#I believe this list of standard stations comes from Keith- includes daytime CTD info position location for stations (4 digit during day)
+```
+# Clean up imported CTD data- select for survey years of interest (2013:2018)
+
+- convert lat long values from decimal minutes to decimal degrees
+- add column for year, and date (day_ctd)
+
+*Note CTD_LAT and CTD_LON are the position info for the actual locations of the CTD (not the station position that was the likely target location). I am planning to use the actual CTD position for this study, but in future work, may wish to use location of standard positions - also note that Keith mentioned there were some inconsistencies in the CTD station location info (and trawl haul), so if I end up using these, double check with Keith first to see if he pr Becky has revised the dataset further- I believe they have.
+```{r clean header df}
+
+# clean up CTD data
+ctd_header <- ctd_header %>% 
+            mutate(date_parsed= mdy_hms(CTD_DATE)) %>% # create a new variable (column) parsing the date from factor to POSIX ct and t
+            mutate(Year= year(date_parsed)) %>% # create a new column "year" which extracts the year info from our parsed date column
+            mutate(day_ctd= as_date(date_parsed))%>% #create a new col with day
+            rename(y = CTD_LAT, x = CTD_LONG) %>% # rename our latitude (y) and longitude (x) columns
+            mutate(lat.d  = as.numeric(str_sub(y, start=1, end= 2)), #create a new column of first 2 terms dd from latitude
+            lat.m  = as.numeric(str_sub(y, start=3, end=6)), # extract minutes terms (mm.mm) from 3-6 position in lat col
+            LATITUDE    = lat.d + lat.m/60, # divide mm.mm by 60 and add to dd terms
+            long.d = as.numeric(str_sub(x, start=1, end= 3)), #first 3 terms ddd
+            long.m = as.numeric(str_sub(x, start=4, end=7)), #extract mm.mmm terms in position 4-7 
+            LONGITUDE = -(long.d + long.m/60)) %>% # create new col for longitude, note - for longitude values
+            dplyr::select(-c(lat.d, long.d, lat.m, long.m, x, y)) #remove intermediary columns 
+  
+#create vector of years of our study
+survey_yrs <- 2013:2018
+
+# Select for our years of interest: 2013-2018
+ ctd_header <- ctd_header %>%
+                filter(Year %in% survey_yrs)
+
+#the code above converts CTD_LAT to LATITUDE and CTD_LONG to LONGITUDE variables in decimal degrees- this is the specific position of a given CTD, not the station position. Note there is a value for each record- whew! 
+ 
+ # select for our years of interest (2013-2018) for the vertical profile info:Because we haven't merged these data to date cols, can only select by CRUISE ID. Note this is just in an effort to reduce the size of the df (a lot of data with all years + all casts)
+ 
+ #unique(ctd_cast$CRUISE)
+ 
+ cruise_yrs <- c(1305, 1405, 1505, 1603, 1703, 1802)
+ 
+ctd_cast<-  ctd_cast %>%
+   filter(CRUISE %in% cruise_yrs)
+ 
+# this selects for the vertical profile data for the years 2013--2018
+```
+
+# Plot CTD positions for reference;
+Note that because these data have not been converted into sf objects, they display in a weird projection! 
+# convert to sf object
+ctd_header_sf <- st_as_sf(ctd_header, coords=c("LONGITUDE", "LATITUDE"), crs=4326)
+
+# Plot acoustic tracks + CTD locations (all CTDs, regardless of depth)
+
+```{r plot acoustic tracks with CTD locations}
+ggplot()+
+  geom_sf(data=states)+
+  geom_point(data=echo_integration, aes(x=Lon_M, y=Lat_M, color=as.factor(Day)), show.legend = F)+ #plot acoustic tracks
+  geom_point(data=ctd_header, aes(x= LONGITUDE, y=LATITUDE), color="black", shape=3,  size=1, show.legend = F)+
+  coord_sf(crs=st_crs(states), xlim = c(min(echo_integration$Lon_M-0.25), max(echo_integration$Lon_M+0.25)), ylim = c(min(echo_integration$Lat_M-0.25), max(echo_integration$Lat_M+0.25)))+
+  facet_wrap(~Year)+
+  theme_classic()
+```
+# CTD variables: 
+Now that we have the CTD data loaded, lets look at what these data contain:
+
+    CTD_HEADER:
+  #CRUISE: cruise # unique for each year
+  #CTD_INDEX: Unique number for each CTD per cruise 
+  #provide unique key for linking to CTD_cast table 
+  CTD_NO: ID for actual instrument (this should be the same for each cruise, multiple cruises)
+  STATION: if a fixed position (can be blank if loc not fixed)
+  CTD_DATE: dd-mm-yyyy hh:mm:ss.ss
+  CTD_LAT: ddmm.mm
+  CTD_LONG: dddmm.mm
+  CTD_BOTTOM_DEPTH: depth from acoustic sensor or chart
+  TS_TEMP: (surface) shipboard thermosalinometer 
+  TS_SAL: (surface) shipboard thermosalinometer
+  
+     CTD_CAST:
+  #CRUISE: cruise # unique for each year
+  #CTD_index: CTD cast number
+  CTD_depth: (meters) depth in meters of the ctd when measurement taken. This is not bottom depth
+  TEMPERATURE: degrees celcius
+  SALINITY: PSU
+  DENSITY: kg/m^3 water density (sigma-theta)
+  DYN_HGT: dynamic meters 
+  IRRAD: irradiance (available radiation) microEinsteins/second/m^2 
+  FlUOR_VOLT: florometer voltage
+  TRANSMISSIVITY: percent: water transparency as measured by the ctd
+  CHLOROPHYLL: micrograms/liter: ;calibrated concentration of chl a based on water bottle samples processsed back at the laboratory compared with the ctd
+  Oxygen: mililiters/liter: dissolved oxygen concentration as measured by the ctd
+  
+  NOTE: data were collected every 2m depth
+  NOTE: data collected on way DOWN (not on return cast)- check!
+  
+  # An additional note on CTD collection and processing: 
+  "All data in the CTD_CAST table were post-processed back at the lab using SEASAVE from the raw HEX files collected at sea before being loaded into the database.  Temperature, salinity, and density data should be available for almost all casts.  However, the other variables will be missing from earlier years as the sensors were not present.  The PAR sensor was added in 1994, the fluorometer in 1995, the transmissometer in 1997, and the oxygen sensor in 2010.  Note that some years there were issues with particular sensors (e.g., the transmissometer) so there will be missing data for that particular sensor.  The CTD data should be up to date in the database through 2019." -Keith Sakuma
+
+
+# Join the actual vertical CTD data (ctd_cast) to our metadata (ctd_header for 2013:2018)
+
+The following adds all CTD oceanographic variables to our header data for ALL (regardelss of depth) 2013:2018 sites (tempting to select for only those stations with adequately deep bottom depths, but because bottom_depth usually comes from chart, not actual recorded data depths, going to select based on actual data collected)
+
+```{r join CTD cast data to CTD header data}
+
+#left join ctd_cast (CTD vertical data) to CTD station metadata (ctd_header) - in this case all CTD casts (regardless of depth, from 2013-2018)
+ctd_data <- left_join(x=ctd_header, y=ctd_cast, by=c("CRUISE","CTD_INDEX")) 
+
+# add ctd_cast to ctd_header df by the cols CRUISE and CTD_INDEX (unique casts)
+
+# each obs (row) represents a CTD data point (for multiple variables- columns) at a particular location
+rm(cruise_yrs, survey_yrs) 
+
+```
+# We lost a couple CTD casts in the join. 
+The following is a list of the casts that did not match by CRUISE and CTD_INDEX
+  
+  See note below: this is just for ref and can be ignored!
+```{r}
+lost_ctds<-  anti_join(x=ctd_header, y=ctd_cast, by=c("CRUISE","CTD_INDEX")) 
+
+ggplot(data=lost_ctds)+
+  geom_sf(data=states)+
+  geom_point(aes(x=LONGITUDE, y=LATITUDE, color=as.factor(Year)))+
+  coord_sf(xlim=c(min(lost_ctds$LONGITUDE), max(lost_ctds$LONGITUDE)), ylim=c(min(lost_ctds$LATITUDE), max(lost_ctds$LATITUDE)))+
+  theme_minimal()
+
+# export list of missing ctd casts and go thru them all one by one
+write.csv(lost_ctds, file = "lost_ctds.csv")
+
+rm(lost_ctds)
+
+```
+
+# Finding the missing CTD casts?!
+I created a list of missing CTD vertical data (where there was a record in ctd_header for a CRUIS and CTD_INDEX, but no ctd_cast data)
+I checked the ctd_cast df to ensure that there wasn't actually any vertical data that may have just not merged properly (there wasn't) and on 8/15/22 I spoke with Keith who said that this is very reasonable (CTDs have died in the past, and there have been issues with the survey tech, calibration files, etc.) For more, I could check the CTD folder in the MWT folder on the server (which I don't currently have access to), but for now I am going to assume that these data are just bad/missing. 
+- A follow up from Keith and the REadme file for 2018 confirmed that there were some real issues with the CTD on the ship:
+casts 1-24 and 44-48 had faulty wiring for flurometer so no data (all NAs), don't use par data for this year or transmissometer! Casts 49-58 not processed because of problems with setup and wiring. I am assuming the other years had similar challenges, but it was good ot follow up as 2018 had the most! 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Determine the deepest depth a given CTD cast actually recorded vertical data to! Select casts that went at least 500m deep!
+I am interested in only keeping those CTD casts that extend into our region of interest 150-525m
+Thus the following code selects for the deepest record of depth per cast (CTD_INDEX) for a given year
+```{r select for CTD based on deepest record}
+# Create a df of those CTD casts (unique CRUISE and CTD_INDEX) with a max depth (last row per CTD_INDEX) of at last 150m
+
+ctd_deep <- ctd_data %>% 
+  group_by(CRUISE, CTD_INDEX) %>% #unique code for each year + CTD cast
+  slice(n())%>% # select the last row for each unique CTD (CTD_INDEX) (and year)
+  dplyr::select(CRUISE, CTD_INDEX, CTD_BOTTOM_DEPTH, CTD_DEPTH)%>%
+  filter(CTD_DEPTH>= 500)
+
+# keep only CRUISE and CTD_INDEX (going to join by these values and don't want redundant depth columns -- need to add ALL records per cast)
+ctd_deep <- dplyr::select(ctd_deep, c(CRUISE, CTD_INDEX))
+
+# select for CRUISE and CTD_INDEX and join to that df
+ctd_deep_data <- left_join(x= ctd_deep, y=ctd_data, by=c("CRUISE", "CTD_INDEX")) 
+
+
+# remove intervening dfs
+rm(ctd_deep, ctd_data)
+
+# remove initial tables as ctd_deep_data now has all info from 2013:2018 for those CTD casts where the recorded depth was at least 150m
+rm(ctd_cast, ctd_header)
+
+```
+# Check that this join worked appropriately! 
+ check<-  ctd_deep_data %>% 
+  group_by(CRUISE, CTD_INDEX) %>% #unique code for each year + CTD cast
+  slice(n())%>% # select the last row for each unique CTD (CTD_INDEX) (and year)
+  select(CRUISE, CTD_INDEX, CTD_BOTTOM_DEPTH, CTD_DEPTH)
+range(check$CTD_DEPTH)
+NOTE: slice_tail() would also work instead of slice(n()), n() being the number per group and slice
+OKAY, so the df: ctd_deep_data is a df containing all the vertical physical data (in 2m bins) from those CTD casts that recorded values to at least 500m (to match our acoustics data)
+
+
+# Map of acoustic track and CTD casts -- create unique location df
+(that actually have vertical profile data present to at least 500m)-- create df with max depth
+
+First because this df (ctd_deep_data) now contains all vertical records for each unique CTD cast (CRUISE + CTD_INDEX), I need to select for unique lat long and plot the location of these ctd casts. (Ie only plot each CTD cast once, not for every record of the vertical profile)
+
+```{r plot of CTD data with acoustic track we actually have data for}
+
+# create df of unique locations - since already have code for selecting the last entry per cast, going to do the same here
+# this has the added benefit of having the max depth an individual CTD sampled
+ctd_deep_loc <- ctd_deep_data %>% 
+                group_by(CRUISE, CTD_INDEX) %>% #unique code for each year + CTD cast
+                slice(n())%>% # select the last row for each unique CTD (CTD_INDEX) (and year)
+                dplyr::select(CRUISE, CTD_INDEX, CTD_BOTTOM_DEPTH, CTD_DEPTH, LATITUDE, LONGITUDE, Year)
+```
+# Plot CTD locations (casts that recorded data to at least 500m) over acoustic tracks
+Plotted the ctd index value so we can remove those outside study region
+
+```{r plot CTDs over acoustic tracks}
+
+# Plot these locations with our acoustic track
+ggplot()+
+  geom_sf(data=states)+
+  geom_point(data=echo_integration, aes(x=Lon_M, y=Lat_M), color="snow3", alpha=0.5, show.legend = F)+ #plot acoustic tracks
+  scale_color_viridis_d()+
+  geom_point(data=ctd_deep_loc, aes(x= LONGITUDE, y=LATITUDE, fill=CTD_DEPTH), color="transparent", shape=21,  size=1, show.legend = T)+
+  geom_text(data=ctd_deep_loc, aes(x=LONGITUDE, y=LATITUDE, label=CTD_INDEX), size=1.5, hjust=0.5, vjust=0.5)+
+  scale_fill_continuous(trans = 'reverse')+ #reverse color scale 
+  coord_sf(crs=st_crs(states), xlim = c(min(echo_integration$Lon_M-0.25), max(echo_integration$Lon_M+0.25)), ylim = c(min(echo_integration$Lat_M-0.25), max(echo_integration$Lat_M+0.25)))+
+  facet_wrap(~Year)+
+  theme_classic()
+
+```
+# Plot interactive map 
+with station numbers so we can see which plots appear outside of our regualarly sampled range:
+
+# Create an interactive map to see which stations appear outside our normal range
+```{r}
+#install.packages("leaflet")
+
+library(leaflet)
+
+# plot interactive map
+leaflet()%>%
+  addProviderTiles(providers$Esri.OceanBasemap) %>%
+  addCircleMarkers(data=ctd_deep_loc, ~LONGITUDE, ~LATITUDE, popup=~paste(Year, CTD_INDEX))
+```
+# Remove stations that were outside core region or beyond our range (too far offshore)
+Based on plot above...
+- In 2016 there were 3 stations outside of our typical sampling range, which need to be removed. (Likewise I didn't analyze acoustics data from this far out in this year). 
+- in 2018 there are some additional outside regions to be removed 
+
+-Need to also remove these stations from our vertical data: ctd_deep_data
+- Would also like to restrict our geographic range of CTD samples to just be from the core region (to match our acoustics survey)
+```{r}
+# Remove stations from 2016 (195, 194, 193) and 2018 (182, 172, 162, 221) that were sampled far outside of our typical core region (didn't process acoustics out there either)
+ctd_deep_loc_core <- ctd_deep_loc %>%
+                filter(!(Year==2016 & CTD_INDEX %in% c(195, 194, 193, 192)))%>% #remove stations from 2016 outside our acoustic tracks
+                filter(!(Year==2018 & CTD_INDEX %in% c(220, 219, 218, 217, 216, 221)))%>% # remove stations from 2018 outside acoustic tracks
+                filter(LATITUDE >= 36.45 & LATITUDE <= 38.33) #core region
+
+
+# Remove the same stations from the data df
+ctd_deep_data_core <- ctd_deep_data %>%
+                filter(!(Year==2016 & CTD_INDEX %in% c(195, 194, 193, 192))) %>%
+                filter(!(Year==2018 & CTD_INDEX %in% c(220, 219, 218, 217, 216, 221)))%>% # remove stations from 2018 outside acoustic tracks
+                filter(LATITUDE >= 36.45 & LATITUDE <= 38.33) # Select for only those CTD stations within the CORE region- LAT 36.45 to 38.33
+
+# rm previous (more inclusive version of CTD data)
+rm(ctd_deep_data, ctd_deep_loc)
+
+```
+# From here and below:
+The data we are summarizing is from the core region (defined as 36.45 to 38.33), with longitudes that coincide with our acoustic tracks (ie removed offshore records) and max depths if at least 500m (or greater)! 
+
+- I heard back from Jerome and he said using CTDs that extended to at least 500m (even if it means less casts) is preferable (also what Schroeder did in his water mass+ rockfish paper)
+
+
+# Plot final CTD stations with acoustic track 
+The following dfs:
+ctd_deep_data_core:: Vertical data for those CTD casts deployed within the CORE region and with a max depth of at least 500m (or greater) and with the couple offshore stations removed.
+ctd_loc_core:: Same as above but just the last row of each CTD deployment from ctd_deep_data_core (so max depth the ctd actually visited and a single lat long so easier to plot than the vertical data)
+
+
+```{r final CTDs and acoustic tracks}
+
+# Plot these locations with our acoustic track
+ggplot()+
+  geom_sf(data=states, fill="bisque4", alpha=0.7)+
+  geom_point(data=echo_integration, aes(x=Lon_M, y=Lat_M), color="grey", alpha=0.75, size=1, show.legend = F)+ #plot acoustic tracks
+  geom_point(data=ctd_deep_loc_core, aes(x= LONGITUDE, y=LATITUDE, fill=CTD_DEPTH), color="darkblue", shape=3,  size=1.25, show.legend = F)+
+  coord_sf(crs=st_crs(states), xlim = c(min(echo_integration$Lon_M-0.25), max(echo_integration$Lon_M+0.25)), ylim = c(min(echo_integration$Lat_M-0.25), max(echo_integration$Lat_M+0.25)))+
+  facet_wrap(~year)+ # year not Year
+  xlab("")+
+  ylab("")+
+  theme_classic()
+
+ggsave(filename = "./plots/ctd/ctd_deeper_500.jpeg")
+```
+
+# NAMING CONSISTENCY--- Hmmm could also just run this later prior to merging with acoustics data
+To match ctd data to acoustics regrid data for plotting, changing Year to year. This might mess up subsequent re-runs of plots above, but should make things smoother below this line. Only changing for location df for now (plotting) as opposed to full vertical data ctd_deep_data_core
+NOTE: plot above a little unreliable. Doesn't appear to have faceted by year!! year will facet CTD data, but NOT acoustic tracks, so these are the true ctd stations, but not the underlying acoustic track. TO do that, need to update Year to year in echo_integration, but I don't want to mess up other code at the moment :) 
+
+```{r}
+#ctd_deep_loc_core = ctd_deep_loc_core |> rename(year=Year)
+```
+
+
+
+# Plot position of CTDs with regridded acoustics data
+I regridded all of the acoustics data to a 25 by 25km grid. 
+Would like to visually look at these cells with CTD overlay
+```{r}
+ggplot()+
+  geom_sf(data=states)+
+  geom_point(data=acoustics_regrid_25km, aes(x=lon, y=lat, fill=MVBS), size=5.2, shape=22, alpha=0.5)+
+  scale_fill_viridis_b()+
+  geom_point(data=ctd_deep_loc_core, aes(x= LONGITUDE, y=LATITUDE), color="black", shape=3,  size=1.25, show.legend = F)+
+  coord_sf(crs=st_crs(states), xlim = c(min(ctd_deep_loc_core$LONGITUDE-0.25), max(ctd_deep_loc_core$LONGITUDE+0.25)), ylim = c(min(ctd_deep_loc_core$LATITUDE-0.25), max(ctd_deep_loc_core$LATITUDE+0.25)))+
+  scale_x_continuous(breaks = round(acoustics_regrid_25km$lon_grid_low, 2), minor_breaks = NULL)+
+  scale_y_continuous(breaks=round(acoustics_regrid_25km$lat_grid_hi,2), minor_breaks = NULL)+
+  facet_wrap(~year)+
+  xlab("")+
+  ylab("")+
+  theme_classic()+
+  theme(panel.grid = element_line(color="grey"),
+        axis.text.x = element_text(angle=90))
+
+ggsave(filename = "./plots/ctd/ctd_deeper_500_grid.pdf", width=8.5, dpi=300)
+```
+NOTE: I could then redo this with only those squares that had both acoustics and ctd data... 
+
+# PLOT vertical profiles of CTD data
+
+Rationale: I would like to visually inspect each profile to ensure there isn't anything too wonky/weird (caught a couple errant salinity measurements previously).
+Note that for a given year, CTD_INDEX represents a unique CTD cast (profile)
+Goal: identify and remove values that are due to measurement error.
+
+# Plot vertical profile of CTD data (ex. one indivdiual cast)
+I was having some difficulty plotting these data (they looked WONKY), but it turns out it was because when plotting geom_line() R expected the independent variable to be on the X-axis (not the Y like we plotted as depth). Thus, I needed to plot the data as raw points (not line), and when I DO plot a line, use the input "orientation="y"" to resolve the issue. I am only plotting oxygen and temperature because salinity and some of the other variables are on a very different scale!! 
+
+```{r Plot a practice CTD profile}
+# individual CTD cast or example
+
+ggplot(data = filter(ctd_deep_data_core, Year=="2014" & CTD_INDEX==8))+ #MANUALLY SELECTED
+  geom_point(aes(y=CTD_DEPTH, x= TEMPERATURE, color= "Temp"), size=1, alpha=0.4)+
+  geom_line(aes(y=CTD_DEPTH, x= TEMPERATURE, color= "Temp"), linewidth=0.5, orientation = "y")+
+  geom_point(aes(y=CTD_DEPTH, x= OXYGEN, color= "Oxygen"), size=1, alpha=0.4)+
+  geom_line(aes(y=CTD_DEPTH, x= OXYGEN, color= "Oxygen"), linewidth=0.5, orientation = "y")+
+  #geom_point(aes(y=CTD_DEPTH, x= SALINITY, color= "Salinity"), size=1)+
+  #geom_line(aes(y=CTD_DEPTH, x= SALINITY, color= "Salinity"), size=1, orientation = "y")+
+  scale_y_reverse()+
+  scale_color_manual(values = c(
+    "Temp"="firebrick4",
+    "Oxygen"= "skyblue4",
+    "Salinity"= "orange3"
+  ))+
+  labs(color="Oceanographic variable")+
+  ylab("Depth (m)")+
+  xlab("")+
+  theme(panel.background = element_blank(),
+        panel.grid = element_blank(),
+        legend.key = element_blank())
+
+
+
+# or ALL profiles per year (by CTD_INDEX)
+ggplot(data = ctd_deep_data_core)+
+  #geom_point(aes(y=CTD_DEPTH, x= TEMPERATURE, color= "Temp"), size=1, alpha=0.4)+
+  geom_line(aes(y=CTD_DEPTH, x= TEMPERATURE, color= "Temp"), size=0.5, orientation = "y")+
+  #geom_point(aes(y=CTD_DEPTH, x= OXYGEN, color= "Oxygen"), size=1, alpha=0.4)+
+  geom_line(aes(y=CTD_DEPTH, x= OXYGEN, color= "Oxygen"), size=0.5, orientation = "y")+
+  #geom_point(aes(y=CTD_DEPTH, x= SALINITY, color= "Salinity"), size=1)+
+  #geom_line(aes(y=CTD_DEPTH, x= SALINITY, color= "Salinity"), size=1, orientation = "y")+
+  scale_y_reverse()+
+  scale_color_manual(values = c(
+    "Temp"="firebrick4",
+    "Oxygen"= "skyblue4"
+  ))+
+  labs(color="Oceanographic variable")+
+  ylab("Depth (m)")+
+  xlab("")+
+  facet_wrap(~Year)+
+  theme(panel.background = element_blank(),
+        panel.grid = element_blank(),
+        legend.key = element_blank())
+  
+  ggsave("./ctd/allprofiles.jpg", bg="white")
+```
+# QAQC: Look at TS plots and see which casts have errant values
+Plot TS plots for all of our years of data
+```{r}
+
+# or ALL profiles per year (by CTD_INDEX)
+ggplot(data = filter(ctd_deep_data_core, Year==2015), aes(x=SALINITY, y=TEMPERATURE, color=CTD_INDEX))+
+  #geom_point(aes(y=TEMPERATURE, x= SALINITY, color= CTD_INDEX), size=0.5)+
+  geom_text(aes(x=SALINITY, y=TEMPERATURE, label=CTD_INDEX), size=2)+
+  ylab("Temperature (C)")+
+  xlab("Salinity")+
+  #facet_wrap(~Year)+
+  theme(panel.background = element_blank(),
+        panel.grid = element_blank(),
+        legend.key = element_blank())
+
+
+```
+You can clearly see there are a few casts with errant values - it wouldn't make sense that salinity varied this much at depth. I talked to Jerome about these extensively. He said surface salinity can be quite variable (as you would expect with rain, etc) but not at depth like these ones.
+
+# FOR LOOP: Create a profile plot of each oceanographic variable per CTD cast
+
+Export each plot to a folder of oceanographic data
+Then, I went through and visually examined all of the variables (each ctd cast)
+```{r}
+# would like to iterate over each ctd cast per given year
+
+yr= unique(ctd_deep_data_core$Year) #vector of years
+#for each CTD cast within a given year, plot a vertial profile and export
+
+# select for a specific year (2013-2018)
+for (i in 1:length(yr)){
+
+    # filter all CTD output for year i  
+    yr_ctd <- ctd_deep_data_core %>%
+              filter(Year %in% yr[i])
+  
+  
+  #create vector of unique ctd casts (CTD_INDEX) for given year
+    yr_ctd_cast= unique(yr_ctd$CTD_INDEX)
+  
+  #then for given year, iterate over each ctd cast
+  for (j in 1:length(yr_ctd_cast)){
+    
+    
+  
+  #select indivdiual ctd cast within a given year
+    ctd_cast_data <- yr_ctd %>% #from data for all casts in year i
+                     filter(CTD_INDEX %in% yr_ctd_cast[j])#select individual ctd cast
+
+    
+    # unique oceanographic variables
+    ocean_variable <- c("TEMPERATURE", "OXYGEN", "SALINITY", "CHLOROPHYLL", "DENSITY", "DYN_HGT", "IRRAD", "TRANSMISSIVITY")
+    
+    
+    # select for each oceanogrpahic variable (col) within the specific cast and plot
+    for (k in 1:length(ocean_variable)){
+    
+  # create a plot for specific year and ctd cast within that year-- oceanographic variable
+
+    
+  ggplot()+
+    geom_line(data=ctd_cast_data, aes(y=CTD_DEPTH, x= !!sym(ocean_variable[k])), color="grey", linewidth=1.5, orientation="y")+ #line
+    geom_point(data=ctd_cast_data, aes(y=CTD_DEPTH, x= !!sym(ocean_variable[k])), color="sienna3", size=0.5, alpha=0.4)+ #plot individual points above
+    scale_y_reverse(expand=c(0,0))+ #remove extra space so plots begin at the surface
+    xlab(paste0("Variable ", ocean_variable[k]))+
+    ylab("Depth (m)")+
+    #xlim(0, max(ctd_cast_data$ocean_variable[k]))+ #x axis limits based on max value of variable
+    ggtitle(paste0(ocean_variable[k], yr[i], " CTD Index: ", yr_ctd_cast[j]))+ # create a title for CTD station year and CTD cast
+  geom_hline(yintercept = 150, linetype="dashed", color="darkgrey")+ #simple line demarking mesopelagic depths
+  geom_hline(yintercept = 500, linetype="dashed", color="darkgrey")+
+  theme(panel.grid.major=element_blank(), 
+        panel.grid.minor=element_blank(), 
+        panel.background = element_blank(),
+        panel.border = element_rect(colour="black", fill=NA, linewidth =2),
+        legend.key = element_rect(fill=NA))
+# quick note on aes x input: !! removes quotes and sym() converts to symbol so can be read as raw column name
+  
+  # export plot with unique name
+  ggsave(filename=paste0("./plots/ctd/profiles/", ocean_variable[k],"/",ocean_variable[k], "_",yr[i], "_",yr_ctd_cast[j], ".jpeg")) #store output to folder plot/ctd/ temp
+    }
+  }
+    
+}
+rm(ctd_yr, ocean_variable, yr, yr_ctd_cast, i, j, k, ctd_cast_data)#remove iterative objects when all done
+
+```
+Whoohoo! This worked beautifully to create individual plots of each oceanographic variable per cast 
+I emailed Jerome to ask about the couple of errand CTD casts that had strange values of salinity and in turn density
+
+2015: cast 220
+2017: cast 28
+Note also from TS plot for 2015 cast 242 seemed to stand out but this was just caused by a low salinity value at the surface which I think is valid (as salinity can vary widely in the surface)
+
+
+# REMOVE bad CTD data
+
+Based on a visual inspection of all CTD profiles, I removed the following salinity and density data:
+2015: cast 220 removed below 300m
+2017: cast 28 removed below 100m
+
+In both cases I removed salinity and density data (but left other variables) below these depths
+
+```{r}
+
+# CONVERT VALUES BELOW SPECIFIC DEPTH TO NA: 2015, CTD cast 220 remove below 300m-- salinity and density
+ctd_deep_data_core$SALINITY[ctd_deep_data_core$Year==2015 & ctd_deep_data_core$CTD_INDEX==220 & ctd_deep_data_core$CTD_DEPTH>=300] <- NA
+ctd_deep_data_core$DENSITY[ctd_deep_data_core$Year==2015 & ctd_deep_data_core$CTD_INDEX==220 & ctd_deep_data_core$CTD_DEPTH>=300] <- NA
+
+# 2017, CTD cast 28 remove below 100m-- salinity and density
+ctd_deep_data_core$SALINITY[ctd_deep_data_core$Year==2017 & ctd_deep_data_core$CTD_INDEX==28 & ctd_deep_data_core$CTD_DEPTH>=100] <- NA
+ctd_deep_data_core$DENSITY[ctd_deep_data_core$Year==2017 & ctd_deep_data_core$CTD_INDEX==28 & ctd_deep_data_core$CTD_DEPTH>=100] <- NA
+
+# Now we have removed the couple of outliers in our ctd data
+```
+
+WEHW, okay the df: ctd_deep_data_core is our cleaned, deep, core CTD data (ie what we will use for all subsequent analysis)
+
+# ADDITIONAL CTD METRICS--- CALCULATED METRICS
+
+# CHLOROPHYLL-A : smoothing
+Because of some variability in the CTD data (it jumps around quite a bit due to instrument variability), Jerome suggested adding a smoother to these data
+
+REFERENCES:https://www.r-bloggers.com/2014/01/smoothing-ctd-profiles/
+
+Try smoothing chl data over 3 values (since data every 2m, this would be 6m, or 2m above and 2m below actual 2m pt)
+Calculated a moving average https://stackoverflow.com/questions/743812/calculating-moving-average stats::filter
+```{r}
+ungroup(ctd_deep_data_core) 
+
+chl_smooth_fx= function(x, n = 3){stats::filter(x, rep(1 / n, n), sides = 2)} #function to calculate moving average of n cells
+
+
+# add new column for chl smooth (which is the smoothed value of chl with cell above and below)
+ctd_deep_data_core <- ctd_deep_data_core |> # all of our ctd data
+                      group_by(CTD_INDEX, Year) |> #so for each ctd cast per year
+                      mutate(chl_smooth=round(chl_smooth_fx(x=CHLOROPHYLL, n=3), 2)) #calculate a smoothed value for chl based on 3 cells (1 on each side)
+
+```
+
+This added a new column chl_smooth to our existing df of ctd values
+Note: because we used a cell size of 3 (so one neighboring value on each side), we no longer have a surface value (because no data on one side). As i am planning to simply filter for data <100m and take the depth integrated sum, this shouldn't be a problem as it was applied to each cast
+(ie sum of smoothed chl-a values from 0-100m)
+
+WARNING: when rerunning this April 2023, I got the message: "Adding missing grouping variables: 'CRUISE'" if this happens again, use
+ungroup(ctd_deep_data_core) to ungroup prior to running
+
+## Add additional vertical metrics (potential temp, potential density, spice)
+
+# Load {oce} package:
+
+Calculating potential temperature (a req of TS diagrams) and spice require the {oce} package
+
+To convert our df object to a ctd object that {oce} recognizes:
+- first create a column for pressure (a requirement to be recognized)
+
+swPressure(Depth, latitude= , eos=getOption("oceEOS", default="gsw"))
+```{r oce package create ctd object}
+
+#currently our ctd data is stored as df: ctd_deep_data_core
+head(ctd_deep_data_core)
+
+# To convert our df to a ctd object in {oce} requires a pressure value
+# create column for pressure (calculated with depth and latitude):
+ctd_deep_data_core$PRESSURE <- swPressure(depth=ctd_deep_data_core$CTD_DEPTH, latitude = ctd_deep_data_core$LATITUDE, eos ="gsw")
+# calculation can be gsw - default but only if you have latitude info, otherwise "unesco"
+
+# Create a ctd object in {oce}-- ALL ctd casts
+ctd<- as.ctd(ctd_deep_data_core$SALINITY, ctd_deep_data_core$TEMPERATURE, ctd_deep_data_core$PRESSURE, longitude=ctd_deep_data_core$LONGITUDE, latitude= ctd_deep_data_core$LATITUDE)
+
+```
+
+
+# Calculate SPICE via {oce} package
+
+Compute seawater "spice", also called "spiciness" (a variable orthogonal to density in TS space), in either of two formulations, depending on the value of the eos argument. If eos="unesco" then Flament's (reference 1) formulation is used. If eos="gsw" then the Gibbs SeaWater formulation for "spiciness0" is used (see reference 2).
+
+https://rdrr.io/cran/oce/man/swSpice.html
+
+
+I am basing this work on previous work by Shroeder https://doi.org/10.1139/cjfas-2017-0480
+who calculated spice at the 26.0 isopycnal. 
+
+https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2019GL082685 Need to READ!! 
+
+Steps to calculating spice:
+- Add col for potential temp
+- Add col for potential density
+- select for 26.0 potential density
+- calculate spice (both Flament's ("unesco"), or "gsw"= Gibbs SeaWater formulation)?
+
+NOTE: input for Temperature: in situ temperature and potential calculated within function (see documentation for more)
+From documentation, "In-situ" temperature is the input (deg C) 
+Pressure: seawater pressure (dbar) only used if eos is "gsw" so providing it here.
+
+```{r calculate spice}
+#Add col for potential temperature
+ctd_deep_data_core$Potential_Temperature <- oce::swTheta(salinity = ctd_deep_data_core$SALINITY, temperature = ctd_deep_data_core$TEMPERATURE, pressure = ctd_deep_data_core$PRESSURE, referencePressure = 0, longitude = ctd_deep_data_core$LONGITUDE, latitude = ctd_deep_data_core$LATITUDE, eos = "gsw")
+  
+# Add col for potential density -- in situ temp (auto converted)-- note used Potential Temperature
+ctd_deep_data_core$Potential_Density <- oce::swRho(salinity = ctd_deep_data_core$SALINITY, temperature = ctd_deep_data_core$Potential_Temperature, pressure = ctd_deep_data_core$PRESSURE, longitude = ctd_deep_data_core$LONGITUDE, latitude = ctd_deep_data_core$LATITUDE, eos = "gsw")
+
+
+# Add col for Sigma theta (potential density anomaly)-- input in situ temp values
+ctd_deep_data_core$Sigma_theta <- oce::swSigmaTheta(salinity = ctd_deep_data_core$SALINITY, temperature = ctd_deep_data_core$TEMPERATURE, pressure = ctd_deep_data_core$PRESSURE, referencePressure=0, longitude = ctd_deep_data_core$LONGITUDE, latitude = ctd_deep_data_core$LATITUDE, eos = "gsw")
+
+# Add column for spice-- in situ temp: Gibbs SeaWater formulation
+ctd_deep_data_core$Spice_gibbs <- oce::swSpice(salinity = ctd_deep_data_core$SALINITY, temperature = ctd_deep_data_core$TEMPERATURE, pressure = ctd_deep_data_core$PRESSURE, longitude = ctd_deep_data_core$LONGITUDE, latitude = ctd_deep_data_core$LATITUDE, eos ="gsw") #Gibbs SeaWater formulation
+
+
+# Add column for spice-- in situ temp: Flament's formulation
+ctd_deep_data_core$Spice_flament <- oce::swSpice(salinity = ctd_deep_data_core$SALINITY, temperature = ctd_deep_data_core$TEMPERATURE, pressure = ctd_deep_data_core$PRESSURE, longitude = ctd_deep_data_core$LONGITUDE, latitude = ctd_deep_data_core$LATITUDE, eos ="unesco") # Flaments
+```
+NOTE: I am interested in obtaining these values at the 26.0 isopycnal 
+NOTE NEED TO REVIEW: I could only find calculations for potential density ANOMALY in {oce} I could subtract 1000 from each value to get true density. When I used swRho to calculate density with our potential temperatures, I should have gotten the same value as sigma theta + 1000 but they were ever so slightly off. Thus, I am sticking with sigma Theta to define our density values but left potential_density calculation code just in case. If I need density values, I would just need to add 1000 to each anomaly (sigma theta) value. 
+- Assuming I understand correctly, we are interested in the sigma theta value (potential density anomaly of 26.0 isopycnal) ie. 26 is a pot density
+
+
+
+# II April 2023
+Move to Ocean Regrid.Rmd
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# PLOTS for reference: NOTE I haven't updated any of the code below here, leaving for refence in case I later want to plot these data!!!
+
+# Create TS PLOTS (via {oce}) 
+
+This is the default plot for TS diagrams. I plot these independently in ggplot, but this is a great reference
+
+```{r plot TS for each year}
+# TS- Plot for each year
+pdf(file= "./TS_plots/2018TS.pdf") #file we are going to save
+
+#select year of interest
+yr="2015"
+
+ctd_yr <- ctd_deep_data_core %>%
+          filter(Year %in% yr)
+
+# create ctd object for that year
+ctd <- as.ctd(ctd_yr$SALINITY, ctd_yr$TEMPERATURE, ctd_yr$PRESSURE, longitude=ctd_yr$LONGITUDE, latitude= ctd_yr$LATITUDE)
+
+# create TS plot for that year
+plotTS(ctd, referencePressure = 0) #reference pressure set to surface, but emailed jerome to ask about this
+
+# save plot
+
+#shut down device?
+dev.off()
+
+```
+https://github.com/dankelley/oce/issues/1464
+How to read csv into oce instructions for future use
+
+Problem: this df contains multiple CTD profiles and I can't seem to color the casts by factor (base R?)
+
+NOTE: the default option on this plot is to plot potential temperature values "calculated with reference pressure given by referencePressure", so potential temperature was calculated automatically. 
+
+# Other CTD plotting options in {oce}
+
+plot(ctd) will provide 4 tiles (TS among them) as well as a profile and map
+```{r}
+plot(ctd) # can't figure out how to just select for one plot amongst the 4
+
+plotProfile(ctd)
+```
+*** NOTE: going to have to double check those pressure calculations?! Some strange errors in there? Or might be an artifact of the fact that we can't separate individual casts (all plotted as one?)-- one errant salinity value (surface fresh)
+
+For more on other plotting options
+https://www.youtube.com/watch?v=hhF1jklm-qc
+
+# PRELIMINARY PLOTs: maps of CTD data just for reference
+
+# PLOT: Temperature in upper 10m 
+
+```{r}
+ggplot(data=filter(ctd_deep_data_core, CTD_DEPTH<10))+
+  geom_sf(data=states)+
+  geom_point(aes(x=LONGITUDE, y=LATITUDE, color=TEMPERATURE), size=4)+
+  scale_color_cmocean(name="thermal", direction=1)+
+  xlim(c(min(ctd_deep_data_core$LONGITUDE-0.25), max(ctd_deep_data_core$LONGITUDE+0.25)))+
+  ylim(c(min(ctd_deep_data_core$LATITUDE-0.25), max(ctd_deep_data_core$LATITUDE+0.25)))+
+  xlab("")+
+  ylab("")+
+  theme(panel.background = element_blank())+
+  theme(axis.text.x = element_text(angle = 90))+
+  facet_wrap(~Year)
+  
+```
+
+# PLOT: Smoothed Chl-a depth integrated (sum over upper 100m)
+
+```{r}
+
+# calculate the sum of chl-a (smoothed) over the upper 100m 
+
+        chl=ctd_deep_data_core |> 
+            filter(CTD_DEPTH<=100) |> 
+            group_by(CTD_INDEX, Year) |> 
+            summarize(chl_integrated=sum(chl_smooth, na.rm=TRUE), lat=LATITUDE, lon=LONGITUDE, .groups="drop") |> # sum of chl-smooth values
+            distinct() #because we added lat long data, ensure not repeated for each entry
+       
+  # plot depth integrated chl-a by year-- map
+       
+  ggplot(data=chl)+ #CTD data 100m or shallower
+  geom_sf(data=states)+ #add basemap
+  geom_point(aes(x=lon, y=lat, color=chl_integrated), size=4)+
+  scale_color_viridis_c(direction=1, option = "G")+ #color scale 
+  xlim(c(min(chl$lon-0.25), max(chl$lon+0.25)))+
+  ylim(c(min(chl$lat-0.25), max(chl$lat+0.25)))+
+  xlab("")+
+  ylab("")+
+  labs(color="Chl-a")+
+  theme(panel.background = element_blank())+
+  theme(axis.text.x = element_text(angle = 90))+
+  facet_wrap(~Year)
+
+
+  
+```
+
+# Chl-a plot as a boxplot between years
+
+```{r}
+library(ggthemes)
+  # and as a box plot between years
+  ggplot(data=chl, aes(x=Year, y=chl_integrated))+
+    geom_boxplot(aes(group=Year, color=factor(Year)), outlier.shape = NA, show.legend = F)+
+    geom_jitter(aes(group=Year, color=factor(Year)), alpha=0.25, show.legend = F)+
+    stat_boxplot(aes(group=Year), geom="errorbar", width=0.25)+
+    scale_color_manual(values = c("slategrey", "slategrey", "chocolate", "chocolate", "slategrey", "slategrey"))+
+    scale_x_continuous(n.breaks=6)+ 
+    ylab("Depth integrated chl-a (0-100m)")+
+    xlab("Year")+
+    ggthemes::theme_few()
+  
+```
+Note while there is a decrease in chl-a compared to 2013 and 2014 not very different from 2017 or 2018
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

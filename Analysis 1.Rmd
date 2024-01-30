@@ -3,23 +3,16 @@ title: "Compare biomass between years"
 output: html_notebook
 ---
 
-# NOTES: 
-II as of April 17th, I ran the code below, which ran smoothly, but did not go through it all line by line to ensure it is all clean and ready to go. I need to review this and write up methods concurrently. However, because I am meeting with Jerome on Friday and just took GAM class, I am going to hopscotch this section since it should be all worked out and good and move on to oceanographic variables and GAM, coming back to this later! Also need to look into global Moran's I
-... June 2023: I am now back and going to run the following code and concurrently write up my results as I go (and work on a presentation for next week)
-... July 2023: reviewing all of the output a final time as I write up a more finalized version of the Results section for our manuscript
+# Objective of code
+Analysis 1: Are there differences in acosutically detected biomass and CM between years?! 
 
-### Analysis 1: Are there differences in biomass and CM between years?! 
-
-### Background: 
-The following code analyzes whether there were any differences in the biomass and center of mass depth (m) BETWEEN years in our study. The thought: in the warmer years 2015 and 2016, there appears to be higher overall biomass and a deeper center of mass depth compared to the other years of our study. However, because we originally exported our data in 100m fine-resolution cells, there is the question of which years are significant across years AND at varying cell sizes (sensitivity analysis)
-
-At the finer-resolution, 100m cell size, there is spatially autocorrelation, so we run the risk of violating the assumptions of our statistical test-- everything comes out significant, probably because of the shear number of samples. ON the contrary, when we re-grid up to 25km, we loose a lot of the data. SO Jarrod's suggestion was to run the analysis with many different grid sizes (100m, 1km, 5km, 10km, 15km, 20km and 25km ) and just see if the results change! Results: from 10km onward, the results are totally consistent, so our decision to re-grid by 25km feels justified (could select cell sizes from 10km upward and it doesn't appear to change our results)
+# Background: 
+The following code analyzes whether there were any differences in the biomass and center of mass depth (m) BETWEEN years in our study. We are interested in inter annual differences AND at varying cell sizes (sensitivity analysis)
 
 NOTE: 
-- analysis part 1 (this document): Comparing differences in biomass and Center of mass depth between years
+- analysis part 1 (this document): Comparing differences in biomass and Center of mass depth between years (and diff spatial scales of regridding)
 - analysis part 2 (Analysis 2.Rmd): which oceanographic variables are likely driving the center of mass depth of the DSL at a regridded distance of 25km
 
-This code covers part 1: a comparison of biomass and center of mass between years
 
 # Load libraries 
 ```{r load libraries}
@@ -33,9 +26,7 @@ library(ggthemes) # simplification of themes for ggplotting
 
 # Which re-grid size are you working on?!! MANUAL step
 I regridded by 1km, 5km, 10km, 15km, 20km (from fine-resolution, 100m data originally output)
-Need to set the dataset here (df are differentiated by grid size as acoustics_regrid_15km for ex) so the following code will all run on the same input (to avoid errors changing the df every grid cell size)
-NOTE: All of the regridded data followed the exact same format. However, the 100m plots from echo_integration_all required some changing of terms (ie Lat_M instead of lat etc.) In some cases, for plotting purposes, I filtered out the -999 dB values from the 100m grid cells. This is not to say that they were not valid data! -999 dB on the log scale is just 0! But for plotting purposes it made it difficult to visualize
-NOTE: update in June I am ignoring the 100m fine resolution cells for now, because I did it the first time (old data analysis) and we know these data are autocorelated- also they are annoying to work with because the don't follow the same format- but I've done it, just see old code if needed
+Need to manually set the dataset here (df are differentiated by grid size as acoustics_regrid_15km for ex) so the following code will all run on the same input 
 ```{r manually set the grid size we are working with }
 
 # MANUAL step: select which regridding of acoustics data we are interested in
@@ -46,7 +37,7 @@ grid_size="25km" #MANUAL step
 ```
 
 ### MINIMUM number of 100m grid cells to trust in larger grid size
-There are some instances where our re-gridded cell (of whichever scale) were based on 1 or few 100m horizontal cells. Since we are extrapolating these values over a large region, it seems responsible to ensure that there were at least a minimum of 3 100m fine-resolution cells covering a larger grid cell
+There are some instances where our re-gridded cell (of whichever scale) were based on 1 or few 100m horizontal cells. Since we are extrapolating these values over a large region, select those cells with at least a minimum of 3 100m fine-resolution cells covering a larger grid cell
 
 ```{r}
 # Ensure each cell has at least 3 100m grid cells per re-gridded cell (echo_count)
@@ -80,11 +71,9 @@ rm(lat1, lat2)
 
 ```
 
-# # PLOT acoustic track over regridded data-- how many fine-resolution cells per re-gridded cell?
-Probably need to adjust the shape size depending on grid size ~4 is a nice size for 25km
-can adjust size of square as needed
+# PLOT acoustic track over regridded data-- how many fine-resolution cells per re-gridded cell?
+need to adjust the shape size depending on grid size ~4 is a nice size for 25km
 
-note that for 1km, it was too diffiuclt to see the acoustic track so I # it out as well as grid lines
 #MANUAL: change cell size in geom_point
 ```{r}
 
@@ -120,13 +109,13 @@ summary_year <- acoustic_regrid  |>
                 group_by(year) |> 
                 summarize(no_grid_cells=n(),
                           median_MVBS=round(median(MVBS), 2),
-                          median_NASC=round(median(NASC), 5), 
+                          #median_NASC=round(median(NASC), 5), 
                           median_CM=round(median(cm_m)),
                           se_MVBS=sd(MVBS)/sqrt(no_grid_cells),
-                          se_NASC=sd(NASC)/sqrt(no_grid_cells),
+                          #se_NASC=sd(NASC)/sqrt(no_grid_cells),
                           se_CM=sd(cm_m)/sqrt(no_grid_cells),
                           sd_MVBS=sd(MVBS),
-                          sd_NASC=sd(NASC),
+                          #sd_NASC=sd(NASC),
                           sd_CM=sd(cm_m),
                           quantile_mvbs=quantile(MVBS, probs=0.75), #find the 3rd quantile for labeling letters later
                           quantile_cm=quantile(cm_m, probs=0.75)) 
@@ -154,39 +143,8 @@ ggplot(data=acoustic_regrid, aes(x=year, y=MVBS), color="black")+
 ggsave(filename=paste0("./plots/analysis 1/boxplot_mvbs_", grid_size, ".pdf"), width=7, height=5, units="in")
 
 ```
-# MVBS between years (boxplot) --- CLEAR background for presentations
-```{r clear background}
-
-ggplot(data=acoustic_regrid, aes(x=year, y=MVBS))+
-  stat_boxplot(geom="errorbar", width=0.25, color="white")+
-  geom_boxplot(data=acoustic_regrid, aes(x=year, y=MVBS, fill=year), outlier.shape=NA, show.legend = FALSE, color="white")+ #plot boxplots without outliers since these are all plotted via geom_jitter
-  scale_fill_manual(values = c("2013"="grey20", "2014"="grey20", "2015"="chocolate", "2016"="chocolate", "2017"="grey20", "2018"="grey20"))+
-  geom_jitter(alpha=0.2, color="snow4")+ #add actual data points to our boxplot
-  geom_text(data= summary_year, aes(x = as.factor(year), y = median_MVBS, label = paste0("MVBS: ", median_MVBS)), size = 2.5, vjust = -1, color="white")+ #label median 
-  geom_text(data= summary_year, aes(x = as.factor(year), y = median_MVBS, label = paste0("n: ", no_grid_cells)), size = 2, vjust = 1.5,color="white")+
-  xlab("Year")+
-  ylab("MVBS (dB)")+
-  ggthemes::theme_few()+
-theme(legend.position = 'none',
-        panel.background = element_rect(fill = 'transparent', color="white"),
-        plot.background = element_rect(fill='transparent', color="white"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        legend.background = element_rect(fill='transparent'),
-        legend.box.background=element_rect(fill = 'transparent'),
-        axis.text = element_text(colour="white"),
-        axis.line = element_line(color = "white"),
-        axis.title = element_text(color="white"))
-
-
-
-# save plot to plots folder
-ggsave(filename=paste0("./plots/analysis 1/boxplot_mvbs_clear", grid_size, ".pdf"), width=7, height=5, units="in", bg="transparent")
-```
-
 
 # CM between years (boxplot)
-
 ```{r}
 # simple box plot of NASC values
 ggplot(data=acoustic_regrid, aes(x=year, y=cm_m, color=year))+
@@ -205,48 +163,22 @@ ggplot(data=acoustic_regrid, aes(x=year, y=cm_m, color=year))+
 # save plot to plots folder
 ggsave(filename=paste0("./plots/analysis 1/boxplot_cm_", grid_size, ".pdf"), width=7, height=5, units="in")
 ```
-# CM between years-- clear background for presentation purpoes
-White font and transparent background for better plotting
-```{r clear background white text for ref}
-ggplot(data=acoustic_regrid, aes(x=year, y=cm_m, fill=year))+
-  stat_boxplot(geom="errorbar", width=0.25, color="white")+
-  geom_boxplot(data=acoustic_regrid, aes(x=year, y=cm_m), outlier.shape=NA, show.legend = FALSE, color="white")+ #plot boxplots without outliers since in jitter
-  scale_fill_manual(values = c("2013"="grey20", "2014"="grey20", "2015"="chocolate", "2016"="chocolate", "2017"="grey20", "2018"="grey20"))+
-  geom_jitter(alpha=0.1, color="slategrey")+ #add actual data points to our boxplot
-  scale_y_reverse()+
-  geom_text(data= summary_year, aes(x = as.factor(year), y = median_CM, label = paste0("CM: ", median_CM)), size = 2.5, vjust = -0.5, color="white")+ #label median 
-  geom_text(data= summary_year, aes(x = as.factor(year), y = median_CM, label = paste0("n: ", no_grid_cells)), size = 2, vjust = 1.5, color="white")+ #label sample size 
-  xlab("Year")+
-  ylab("CM (m)")+
-  ggthemes::theme_few()+
-  theme(legend.position = 'none',
-        panel.background = element_rect(fill = 'transparent', color="white"),
-        plot.background = element_rect(fill='transparent', color="white"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        legend.background = element_rect(fill='transparent'),
-        legend.box.background=element_rect(fill = 'transparent'),
-        axis.text = element_text(colour="white"),
-        axis.line = element_line(color = "white"),
-        axis.title = element_text(color="white"))
-
-# save plot to plots folder
-ggsave(filename=paste0("./plots/analysis 1/boxplot_cm_clear", grid_size, ".pdf"), width=7, height=5, units="in", bg="transparent")
-```
-
-
 # PLOT: Distribution of MVBS between years
-
+NOTE:using colors from Okabe & Ito (2008) 
 ```{r}
 # using binned output (25x25km)
 ggplot(data = acoustic_regrid, aes(x=MVBS, colour=year))+
   #geom_histogram(aes(y=..density..),color="grey", fill="transparent", binwidth = 50)+ #this is plotting properly for some reason
-  geom_density(alpha=0.2, fill="NA")+ #plot density curves
-  scale_color_manual(values = c("2013"="grey86", "2014"="grey75", "2015"="chocolate", "2016"="darkorange", "2017"="grey50", "2018"="grey20"))+
-  scale_x_continuous(expand=c(0,0))+ #move plot to axis
+  geom_density(alpha=0.2, fill="NA", linewidth=1)+ #plot density curves
+  scale_color_manual(values = c("2013"="#009E73" , "2014"= "#56B4E9", "2015"="#E69F00", "2016"="#D55E00" , "2017"= "#0072B2", "2018"= "#999999"))+
+  scale_x_continuous(expand=c(0,0), breaks = round(seq(min(acoustic_regrid$MVBS), max(acoustic_regrid$MVBS), by=1), 0))+ #move plot to axis
   scale_y_continuous(expand = c(0,0))+
   xlab("MVBS (dB) ")+
-  theme_classic()
+  ylab("Density")+
+  labs(color="Year")+
+  theme_classic()+
+  theme(axis.text.x = element_text(size=10),
+        axis.text.y = element_text(size=10))
 
 ggsave(paste0("./plots/analysis 1/mvbs_bw_years_", grid_size, ".pdf"))
 ```
@@ -254,18 +186,21 @@ ggsave(paste0("./plots/analysis 1/mvbs_bw_years_", grid_size, ".pdf"))
 
 Great little plot depicting the differences in the distribution of MVBS between years! 
 
-# Plot the distribution of values between years -- CM 
-
+# Plot the distribution of CM between years
 ```{r}
 # using binned output (25x25km)
+
 ggplot(data = acoustic_regrid, aes(x=cm_m, colour=year))+
-  #geom_histogram(aes(y=..density..),color="grey", fill="transparent", binwidth = 50)+ #this is plotting properly for some reason
-  geom_density(alpha=0.2, fill="NA")+ #plot density curves
-  scale_color_manual(values = c("2013"="grey86", "2014"="grey75", "2015"="chocolate", "2016"="darkorange", "2017"="grey50", "2018"="grey20"))+
-  scale_x_continuous(expand=c(0,0))+ #move plot to axis
+  geom_density(alpha=0.2, fill="NA", linewidth=1)+ #plot density curves
+  scale_color_manual(values = c("2013"="#009E73" , "2014"= "#56B4E9", "2015"="#E69F00", "2016"="#D55E00" , "2017"= "#0072B2", "2018"= "#999999"))+
+  scale_x_continuous(expand=c(0,0), breaks = round(seq(min(acoustic_regrid$cm_m)-4, max(acoustic_regrid$cm_m)+1, by=25), 0))+ #move plot to axis
   scale_y_continuous(expand = c(0,0))+
   xlab("Center of mass (m) ")+
-  theme_classic()
+  ylab("Density")+
+  labs(color="Year")+
+  theme_classic()+
+  theme(axis.text.x = element_text(size=10),
+        axis.text.y = element_text(size=10))
 
 ggsave(paste0("./plots/analysis 1/cm_bw_years_", grid_size, ".pdf"))
 ```
@@ -276,139 +211,88 @@ The following is simply the two plots above combined into one output...
 library(patchwork)
 p1=ggplot(data = acoustic_regrid, aes(x=MVBS, colour=year))+
   #geom_histogram(aes(y=..density..),color="grey", fill="transparent", binwidth = 50)+ #this is plotting properly for some reason
-  geom_density(alpha=0.2, fill="NA", show.legend = F)+ #plot density curves
-  scale_color_manual(values = c("2013"="grey86", "2014"="grey75", "2015"="chocolate", "2016"="darkorange", "2017"="grey50", "2018"="grey20"))+
-  scale_x_continuous(expand=c(0,0))+ #move plot to axis
+  geom_density(alpha=0.2, fill="NA", linewidth=1, show.legend = FALSE)+ #plot density curves
+  scale_color_manual(values = c("2013"="#009E73" , "2014"= "#56B4E9", "2015"="#E69F00", "2016"="#D55E00" , "2017"= "#0072B2", "2018"= "#999999"))+
+  scale_x_continuous(expand=c(0,0), breaks = round(seq(min(acoustic_regrid$MVBS), max(acoustic_regrid$MVBS), by=2), 0))+ #move plot to axis
   scale_y_continuous(expand = c(0,0))+
   xlab("MVBS (dB) ")+
-  theme_classic()
+  ylab("Density")+
+  labs(color="Year")+
+  theme_classic()+
+  theme(axis.text.x = element_text(size=10),
+        axis.text.y = element_text(size=10))
 p2=ggplot(data = acoustic_regrid, aes(x=cm_m, colour=year))+
-  #geom_histogram(aes(y=..density..),color="grey", fill="transparent", binwidth = 50)+ #this is plotting properly for some reason
-  geom_density(alpha=0.2, fill="NA")+ #plot density curves
-  scale_color_manual(values = c("2013"="grey86", "2014"="grey75", "2015"="chocolate", "2016"="darkorange", "2017"="grey50", "2018"="grey20"))+
-  scale_x_continuous(expand=c(0,0))+ #move plot to axis
+  geom_density(alpha=0.2, fill="NA", linewidth=1)+ #plot density curves
+  scale_color_manual(values = c("2013"="#009E73" , "2014"= "#56B4E9", "2015"="#E69F00", "2016"="#D55E00" , "2017"= "#0072B2", "2018"= "#999999"))+
+  scale_x_continuous(expand=c(0,0), breaks = round(seq(min(acoustic_regrid$cm_m)-4, max(acoustic_regrid$cm_m)+1, by=25), 0))+ #move plot to axis
   scale_y_continuous(expand = c(0,0))+
   xlab("Center of mass (m) ")+
-  theme_classic()
+  ylab("Density")+
+  labs(color="Year")+
+  theme_classic()+
+  theme(axis.text.x = element_text(size=10),
+        axis.text.y = element_text(size=10))
+p1+p2
+ggsave(paste0("./plots/analysis 1/cm_mvbs_dist_combo_", grid_size, ".pdf"), height=5, width=10, units = "in", dpi = 300)
+```
+# EXPORT plot with black background
+```{r}
+library(patchwork)
+
+# MVBS plot
+p1=ggplot(data = acoustic_regrid, aes(x=MVBS, colour=year))+
+  #geom_histogram(aes(y=..density..),color="grey", fill="transparent", binwidth = 50)+ #this is plotting properly for some reason
+  geom_density(alpha=0.2, fill="NA", linewidth=1, show.legend = FALSE)+ #plot density curves
+  scale_color_manual(values = c("2013"="#009E73" , "2014"= "#56B4E9", "2015"="#E69F00", "2016"="#D55E00" , "2017"= "#0072B2", "2018"= "#999999"))+
+  scale_x_continuous(expand=c(0,0), breaks = round(seq(min(acoustic_regrid$MVBS), max(acoustic_regrid$MVBS), by=2), 0))+ #move plot to axis
+  scale_y_continuous(expand = c(0,0))+
+  xlab("MVBS (dB) ")+
+  ylab("Density")+
+  labs(color="Year")+
+  theme_classic()+
+  theme(axis.text.x = element_text(size=10, color="white"),
+        axis.text.y = element_text(size=10, color="white"),
+        panel.background = element_rect(fill = 'black', color="white"),
+        plot.background = element_rect(fill='black', color="white"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.background = element_rect(fill='transparent'),
+        legend.box.background=element_rect(fill = 'transparent'),
+        legend.text = element_text(color = "white"),
+        legend.title = element_text(color="white"),
+        axis.line = element_line(color = "white"),
+        axis.title = element_text(color="white"))
+
+
+# center of mass plot
+p2=ggplot(data = acoustic_regrid, aes(x=cm_m, colour=year))+
+  geom_density(alpha=0.2, fill="NA", linewidth=1)+ #plot density curves
+  scale_color_manual(values = c("2013"="#009E73" , "2014"= "#56B4E9", "2015"="#E69F00", "2016"="#D55E00" , "2017"= "#0072B2", "2018"= "#999999"))+
+  scale_x_continuous(expand=c(0,0), breaks = round(seq(min(acoustic_regrid$cm_m)-4, max(acoustic_regrid$cm_m)+1, by=25), 0))+ 
+  scale_y_continuous(expand = c(0,0))+
+  xlab("Center of mass (m) ")+
+  ylab("Density")+
+  labs(color="Year")+
+  theme_classic()+
+  theme(axis.text.x = element_text(size=10, color="white"),
+        axis.text.y = element_text(size=10, color="white"),
+        panel.background = element_rect(fill = 'black', color="white"),
+        plot.background = element_rect(fill='black', color="white"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.background = element_rect(fill='transparent'),
+        legend.box.background=element_rect(fill = 'transparent'),
+        legend.text = element_text(color = "white"),
+        legend.title = element_text(color="white"),
+        axis.line = element_line(color = "white"),
+        axis.title = element_text(color="white"))
 
 p1+p2
-ggsave(paste0("./plots/analysis 1/cm_mvbs_dist_combo_", grid_size, ".pdf"), height=4, width=8.5, units = "in", dpi = 300)
+ggsave(paste0("./plots/analysis 1/cm_mvbs_dist_combo_", grid_size, "_clear.pdf"), height=5, width=10, units = "in", dpi = 300, bg="transparent")
 ```
 
-
-# Vertical profile of biomass:
-Using the df: output (Sv value per 5m vertical bin), create a plot with depth on Y axis and Sv (or NASC on X)
--This df:output is everything from 10 m from the surface to bottom_deadzone
-
-This is a common plot I see in acoustic papers which plots backscatter (for a 100m by 5m vertical cell) against depth. This should also highlight the main depths at which we find most backscatter. 
-- can group by "layer" 
-
-```{r log linear conversions}
-
-# convert from dB to linear
-db_to_linear <- function(db){ 10^ (db/10) 
-}
-
-# convert from linear to dB
-linear_to_db <- function(linear){ 10*log10(linear)
-}
-
-# Sv to sv- this doesn't look right! 
-Sv_to_sv <- function(Sv){ 10^ (Sv/10) 
-}
-
-# sv to Sv
-sv_to_Sv <- function(sv){ 10*log10(sv)
-}
-```
-# Depth distribution of backscatter
-Need to convert Sv to sv prior to taking mean value and then reconvert it back from sv to Sv for final plot!
-
-```{r depth and backscatter as a density plot}
-# summarize mean Sv per year
-output$sv= Sv_to_sv(Sv=output$Sv_mean) #create a column that converts Sv to sv
-
-# Summarize by depth bin 
-depth_dist <- output |> 
-              group_by(Layer_depth_min, Year) |> 
-              summarize(sv_mean= mean(sv),
-                        NASC_mean=mean(NASC), .groups="drop")
-#Note: it is not appropriate to take the straight mean of Sv values! Need to convert to sv (linear) and then re-convert back to log (dB) scale! 
-# convert sv back into Sv
-depth_dist$Sv_mean= sv_to_Sv(sv=depth_dist$sv_mean) #convert back from sv to Sv (dB)
-
-
-# Sv mean plot 
-
-ggplot(data = filter(depth_dist, Layer_depth_min>=150 & Layer_depth_min<=525), aes(x=Sv_mean, y=as.factor(Layer_depth_min), group=as.factor(Year), color=as.factor(Year)))+
-  geom_line(orientation = "y")+
-  scale_color_manual(values = c("2013"="grey86", "2014"="grey75", "2015"="chocolate", "2016"="darkorange", "2017"="grey50", "2018"="grey20"))+
-  scale_y_discrete(breaks=c(10, 100,200,300,400,500, 600, 700),labels=c("10","100","200","300","400","500", "600", "700"), limits=rev)+ 
-  ylab("Depth (m)")+
-  xlab("Mean Sv (dB)")+
-  labs(color="Year")+
-  ggthemes::theme_few()+
-  theme(panel.background = element_blank(),
-        legend.key=element_blank())
-  #facet_wrap(~Year)  to get a plot per year
-ggsave("./plots/analysis 1/depth_dist.pdf")
-
-
-
-
-# NASC mean plot 
-
-ggplot(data = filter(depth_dist, Layer_depth_min>=150 & Layer_depth_min<=525), aes(x=NASC_mean, y=as.factor(Layer_depth_min), group=as.factor(Year), color=as.factor(Year)))+
-  geom_line(orientation = "y")+
-  scale_color_manual(values = c("2013"="grey86", "2014"="grey75", "2015"="chocolate", "2016"="darkorange", "2017"="grey50", "2018"="grey20"))+
-  scale_y_discrete(breaks=c(10, 100,200,300,400,500, 600, 700),labels=c("10","100","200","300","400","500", "600", "700"), limits=rev)+ 
-  ylab("Depth (m)")+
-  xlab("NASC")+
-  labs(color="Year")+
-  ggthemes::theme_few()+
-  theme(panel.background = element_blank(),
-        legend.key=element_blank())
-  #facet_wrap(~Year)  to get a plot per year
-ggsave("./plots/analysis 1/depth_dist_nasc.pdf")
-
-#rm(depth_dist)
-```
-Could also use NASC but because this is an integrated value and there are various levels of missing data, MVBS seems like a more appropriate value to use here?! That said, the NASC version of this plot looked better :) NOTE: to create NASC version of this plot, substitute NASC_mean for SV_mean value and replot (second figure above). This version looks way better, but as mentioned I am not sure how this works with integration, so might just ignore using this plot for now...leaving for reference. 
-
-# DATA ANALYSIS
-
-# DISTRIBUTION OF DATA
-# examining distribution of data-- Create a qq (qunatile plot) to assess normality of data- each year seperately
-```{r qq plot MVBS per year}
-
-# Plot QQ plot of MVBS- per year
-ggplot(data=acoustic_regrid, aes(sample=MVBS, group=year, color=year))+
-  stat_qq()+
-  stat_qq_line()+
-  scale_color_brewer(palette = "Blues")+
-  theme(panel.background = element_blank(), 
-        plot.background = element_blank(), #removes plot background
-        legend.key = element_blank()) #removes grey around legend symbols
-
-#ggsave(filename = "./plots/qqplot_nasc_year.jpeg")
-```
-# QQ plot for all years combined 
-Not a great fit of normality since the tails drift below or above our line.
-```{r}
-ggplot(data=acoustic_regrid, aes(sample=MVBS))+
-  stat_qq()+
-  stat_qq_line()+
-  theme(panel.background = element_blank(), 
-        plot.background = element_blank(), #removes plot background
-        legend.key = element_blank()) #removes grey around legend symbols
-```
-
-NOTE: when I initially analyzed these data, I also ran an ANOVA but I think the Kruskall-wallis is more forgiving of our assumptions and thus more robust
 
 # STATISTICAL TEST:  KRUSKAL WALLIS
-
-The Kruskal Wallis test is similar to the ANOVA, but does not require assumption of normality: "The experimental situation is one where K random samples have been obtained, one from each of k possibly different populations, and we want to test the null hypothesis that all of the populations are identical against the alternative that some of the populations tend to furnish greater observed values than other populations." Conover
-
 From Conover 1999: The following Assumptions are required:
 1. All samples are random samples from their respective populations.
 2. In addition to independence within each sample, there is mutual independence among the various samples.
@@ -430,6 +314,7 @@ levels(acoustic_regrid$year) #check on order of factor year (all good in sequent
 
 # Kruskall Wallis test: MVBS and CM between years 
 # MANUAL step
+Make sure to change the grid cell size when storing output
 ```{r MANUAL STEP}
 
 # MANUAL OUTPUT -- save output for grid size
@@ -453,16 +338,14 @@ kw_cm_25km=kw_cm
 If p-value <0.05 we can conclude that there are significant differences between groups (years). In order to know which pairs of years were different, we must further test with multiple comparisons.
 
 # MUTLIPLE COMPARISONS-- Kruskal Wallis 
-Although we now know there are differences between years, we don't know between WHICH years these differences occur. To compare between groups (years) we thus additionally need pairwise comparisons.
+Although we know there are differences between years, we don't know between WHICH years these differences occur. To compare between groups (years) we thus additionally make pairwise comparisons.
 
 Background: "If, and only if the null hypothesis is rejected, we may we use the following procedure to determine which pairs of populations tend to differ" uses rank-sum Conover
 
-NOTE: default value for multiple comparisons is "BH" for Bejamini & Hochberg. see p.adjust for more info. Bonferonni is the most conservative options here so I am starting with that. 
+NOTE: default value for multiple comparisons is "BH" for Bejamini & Hochberg. see p.adjust for more info. Bonferonni is the most conservative option
 
 #MANUAL
 ```{r mutliple comparisons kruskal wallis }
-?pairwise.wilcox.test
-
 # multiple comparisons test-- MVBS
 kw_mc_mvbs= pairwise.wilcox.test(acoustic_regrid$MVBS, acoustic_regrid$year,
                  p.adjust.method = "bonferroni")
@@ -500,7 +383,7 @@ kw_mc_mvbs
 table_cm= kw_mc_cm$p.value
 table_mvbs= kw_mc_mvbs$p.value
 
-#convert these tables into "full" tables ie not just NA using packge rcompaniion
+#convert these tables into "full" tables ie not just NA using package rcompaniion
 kw_mc_cm_full = rcompanion::fullPTable(table_cm)
 kw_mc_mvbs_full = rcompanion::fullPTable(table_mvbs)
 
@@ -521,6 +404,7 @@ summary_year= summary_year |>
 #remove intermediary steps
 rm(kw_mc_cm_full, kw_mc_mvbs_full, table_cm, table_mvbs)
 ```
+NOTE: error message stating atomic vector error, but correctly added to df: summary_year so okay to proceed
 
 # Add output from multiple comparisons to boxplot
 
@@ -530,34 +414,27 @@ https://statdoe.com/one-way-anova-and-box-plot-in-r/
 # Add multipe comparisons letters to boxplot -- MVBS
 color blind friendly palette
 
+#Updated
 clrs = c(
-"a" = "#E69F00FF",
-"b" = "#65B4E9FF",
-"c" = "#009E73FF",
-"d" = "#F0E442FF",
-"e" = "#0072B2FF",
-"f" = "#D55E00FF",
-"g" = "#CC79A7FF"
+"a" = "#009E73",
+"b" = "#56B4E9",
+"c" = "#E69F00",
+"d" = "#D55E00",
+"e" = "#0072B2",
+"f" = "#999999"
 )
-
-So if there are only two groups, ex. "a" and "b", just set colors for a and b and # out the remaining options
-just remove comma after last color
+# color palette from Okabe-Ito 
 
 #MANUAL: adjust color ramp and position of letters within circles :) 
-NOTE: I updated the clrs: so blue is cooler years and orange is warmer years. This means it is no longer consistent with other spatial scales, but fine with that :) Exported typical color scheme as well
+
 ```{r}
 
 #set up MANUAL color scale for letters
 clrs= unique(summary_year$cld_mvbs)
 clrs #run this to see what the output is for a given grid size
 clrs = c(
-"a" = "#65B4E9FF",
-"b" = "#E69F00FF"
-#"c" = "#009E73FF",
-#"d" = "#F0E442FF",
-#"be" = "#0072B2FF",
-#"e" = "#D55E00FF"
-#"g" = "#CC79A7FF"
+"a" = "#0072B2",
+"b" = "#E69F00"
 )
 # manually set some color-blind friendly colors and manually update labels depending on unique combinations
 
@@ -565,9 +442,9 @@ clrs = c(
 ggplot(data=acoustic_regrid, aes(x=year, y=MVBS))+
   stat_boxplot(geom="errorbar", width=0.25)+ #error bars
   geom_boxplot(data=acoustic_regrid, aes(x=year, y=MVBS), outlier.shape=NA)+ #plot boxplots without outliers since in jitter
-  geom_jitter( width=0.10, height=0, alpha=0.3, color="slategrey")+ #add actual data points to our boxplot don't jitter in vertical direction and close toge horiz
-  geom_text(data= summary_year, aes(x = year, y = median_MVBS, label = paste0("MVBS: ", median_MVBS)), size = 2.5, vjust = -0.5)+ #label median 
-  geom_text(data= summary_year, aes(x = year, y = median_MVBS, label = paste0("n: ", no_grid_cells)), size = 2, vjust = 1.5, color="black")+ #n
+  geom_jitter( width=0.15, height=0, alpha=0.3, color="#999999" )+ #add actual data points to our boxplot don't jitter in vertical direction and close toge horiz
+  geom_text(data= summary_year, aes(x = year, y = median_MVBS, label = paste0("MVBS: ", median_MVBS)), size = 2.8, vjust = -0.5)+ #label median 
+  geom_text(data= summary_year, aes(x = year, y = median_MVBS, label = paste0("n: ", no_grid_cells)), size = 2.5, vjust = 1.5, color="black")+ #n
   geom_point(data = summary_year, aes(x = year, y = quantile_mvbs+1, label = cld_mvbs, color=cld_mvbs), size=6, alpha=1, show.legend = FALSE)+ # label cld
   geom_text(data = summary_year, aes(x = year, y = quantile_mvbs, label = cld_mvbs), vjust=-2.2, color="black")+ # label significance cl adjust position
   scale_color_manual(values=clrs)+ #use manual color palette defined above 
@@ -586,7 +463,7 @@ Also vary when exported
 20km: vjust= -1.7
 15km: vjust= -1.4
 10km: vjust= -1.3
-5km: vjust= -1.3
+5km: vjust= -1.4
 1km: vjust= -1.3
 
 # Same plot but transparent background
@@ -595,9 +472,9 @@ for presentations with a black background
 ggplot(data=acoustic_regrid, aes(x=year, y=MVBS))+
   stat_boxplot(geom="errorbar", width=0.25, color="white")+
   geom_boxplot(data=acoustic_regrid, aes(x=year, y=MVBS), fill=NA, color="white", outlier.shape=NA)+ #plot boxplots without outliers since in jitter
-  geom_jitter( width=0.10, height=0, alpha=0.3, color="slategrey")+ #add actual data points to our boxplot don't jitter in vertical
-  geom_text(data= summary_year, aes(x = year, y = median_MVBS, label = paste0("MVBS: ", median_MVBS)), size = 2.5, vjust = -0.5, color="white")+ #label median 
-  geom_text(data= summary_year, aes(x = year, y = median_MVBS, label = paste0("n: ", no_grid_cells)), size = 2, vjust = 1.5, color="white")+ #n
+  geom_jitter( width=0.15, height=0, alpha=0.3, color="#999999" )+ #add actual data points to our boxplot don't jitter in vertical
+  geom_text(data= summary_year, aes(x = year, y = median_MVBS, label = paste0("MVBS: ", median_MVBS)), size = 2.8, vjust = -0.5, color="white")+ #label median 
+  geom_text(data= summary_year, aes(x = year, y = median_MVBS, label = paste0("n: ", no_grid_cells)), size = 2.5, vjust = 1.5, color="white")+ #n
   geom_point(data = summary_year, aes(x = year, y = quantile_mvbs+1, label = cld_mvbs, color=cld_mvbs), size=6, alpha=1, show.legend = FALSE)+ # label cld
   geom_text(data = summary_year, aes(x = year, y = quantile_mvbs, label = cld_mvbs), vjust=-2.2, color="white")+ # label significance cl
   scale_color_manual(values=clrs)+ #use manual color palette defined above 
@@ -628,14 +505,11 @@ ggsave(filename=paste0("./plots/analysis 1/boxplot_kw_mc_mvbs_transparent_", gri
 clrs= unique(summary_year$cld_cm)
 clrs # run this to see unique output per grid size
 clrs = c(
-"a" = "#009E73FF",
-"b" = "#65B4E9FF",
-"c" = "#E69F00FF"
-#"d" = "#F0E442FF",
-#"e" = "#0072B2FF"
-#"f" = "#D55E00FF",
-#"g" = "#CC79A7FF"
+"a" = "#009E73",
+"b" = "#56B4E9",
+"c" = "#E69F00"
 )
+
 # manually set some color-blind freindly colors and manually update labels depending on unique combinations
 
 # simple box plot of MVBS values- multiple comparison results from KW 
@@ -643,11 +517,11 @@ ggplot(data=acoustic_regrid, aes(x=year, y=cm_m, color=year))+
   stat_boxplot(geom="errorbar", width=0.25)+
   geom_boxplot(data=acoustic_regrid, aes(x=year, y=cm_m), outlier.shape=NA)+ #plot boxplots without outliers since in jitter
   #scale_color_manual(values = c("2013"="grey20", "2014"="grey20", "2015"="chocolate", "2016"="chocolate", "2017"="grey20", "2018"="grey20"))+
-  geom_jitter(width=0.10, height=0, alpha=0.3, color="slategrey")+ #add actual data points to our boxplot
-  geom_text(data= summary_year, aes(x = year, y = median_CM, label = paste0("CM: ", median_CM)), size = 2.5, vjust = -0.5, color="black")+ #label median 
-  geom_text(data= summary_year, aes(x = year, y = median_CM, label = paste0("n: ", no_grid_cells)), size = 2, vjust = 1.5, color="black")+ #n
+  geom_jitter(width=0.15, height=0, alpha=0.3, color="#999999" )+ #add actual data points to our boxplot
+  geom_text(data= summary_year, aes(x = year, y = median_CM, label = paste0("CM: ", median_CM)), size = 2.8, vjust = -0.5, color="black")+ #label median 
+  geom_text(data= summary_year, aes(x = year, y = median_CM, label = paste0("n: ", no_grid_cells)), size = 2.5, vjust = 1.5, color="black")+ #n
   geom_point(data = summary_year, aes(x = year, y = quantile_cm+10, label = cld_cm, color=cld_cm), size=6, alpha=1)+ # label cld
-  geom_text(data = summary_year, aes(x = year, y = quantile_cm, label = cld_cm), vjust=2.2, color="black")+ # label significance cld
+  geom_text(data = summary_year, aes(x = year, y = quantile_cm, label = cld_cm), vjust=1.8, color="black")+ # label significance cld
   scale_color_manual(values=clrs)+ #use manual color palette defined above 
   scale_y_reverse()+
   xlab("Year")+
@@ -658,10 +532,12 @@ ggplot(data=acoustic_regrid, aes(x=year, y=cm_m, color=year))+
 ggsave(filename=paste0("./plots/analysis 1/boxplot_kw_mc_cm_jitter_", grid_size, "_.pdf"), width=7, height=5, units="in", bg="transparent")
 
 ```
-25km: vjust= 2.2
+25km: vjust= 2.1
+20km: vjust= 2.1
 15km: vjust= 2.1
 10km: vjust= 2.0
 5km: vjust= 2.0
+1km: vjust= 1.8
 NOTE: also exported with more intuitive color scheme (orginal also exported with underscore original_color_)
 
 # Same plot but transparent background
@@ -672,11 +548,11 @@ ggplot(data=acoustic_regrid, aes(x=year, y=cm_m, color=year))+
   stat_boxplot(geom="errorbar", width=0.25, color="white")+
   geom_boxplot(data=acoustic_regrid, aes(x=year, y=cm_m), outlier.shape=NA, fill=NA, color="white")+ #plot boxplots without outliers since in jitter
   #scale_color_manual(values = c("2013"="grey20", "2014"="grey20", "2015"="chocolate", "2016"="chocolate", "2017"="grey20", "2018"="grey20"))+
-   geom_jitter(width=0.10, height=0, alpha=0.3, color="slategrey")+ #add actual data points to our boxplot
-  geom_text(data= summary_year, aes(x = year, y = median_CM, label = paste0("CM: ", median_CM)), size = 2.5, vjust = -0.5, color="white")+ #label median 
-  geom_text(data= summary_year, aes(x = year, y = median_CM, label = paste0("n: ", no_grid_cells)), size = 2, vjust = 1.5, color="white")+ #n
+   geom_jitter(width=0.15, height=0, alpha=0.3, color="#999999" )+ #add actual data points to our boxplot
+  geom_text(data= summary_year, aes(x = year, y = median_CM, label = paste0("CM: ", median_CM)), size = 2.8, vjust = -0.5, color="white")+ #label median 
+  geom_text(data= summary_year, aes(x = year, y = median_CM, label = paste0("n: ", no_grid_cells)), size = 2.5, vjust = 1.5, color="white")+ #n
   geom_point(data = summary_year, aes(x = year, y = quantile_cm+10, label = cld_cm, color=cld_cm), size=6, alpha=1)+ # label cld
-  geom_text(data = summary_year, aes(x = year, y = quantile_cm, label = cld_cm), vjust=1.9, color="white")+ # label significance cld
+  geom_text(data = summary_year, aes(x = year, y = quantile_cm, label = cld_cm), vjust=2.1, color="white")+ # label significance cld
   scale_color_manual(values=clrs)+ #use manual color palette defined above 
   scale_y_reverse()+
   xlab("Year")+
@@ -700,6 +576,8 @@ ggsave(filename=paste0("./plots/analysis 1/boxplot_kw_mc_cm_transparent", grid_s
 
 # Now re-run for each of the additional grid cell sizes
 1km, 5km, 10km, 15km, 20km, 25km
+
+# When complete, move to 
 
 
 
