@@ -247,6 +247,8 @@ min(which(corr_output[[5]]$correlation<0.05)) #2017: 20
 min(which(corr_output[[6]]$correlation<0.05)) #2018: 26
 
 sum(11, 17, 14, 58, 20, 26)/6 #24.3km
+
+rm(distances)
 ```
 CONCLUSIONS: based on all of the information above an appropriate scale for regridding is 25km! 
 

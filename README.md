@@ -5,7 +5,8 @@ This project was created by Ily Iglesias to make my R code available upon public
 
 This project includes code to :
 - input, read/clean and calculate metrics from processed acoustics data (Read clean.Rmd)
-- conduct a spatial autocorrelation analysis
-- compare acoustic backscatter and center of mass depth between years
+- conduct a spatial autocorrelation analysis (Spatial autocorrelation.Rmd)
+- regrid to spatially independent grid cell size (Regrid.Rmd)
+- compare acoustic backscatter and center of mass depth between years (Analysis 1.Rmd)
 - extract CTD and satellite oceanographic data
 - build a generalized additive model to explore the effect of ocean conditions on center of mass depth

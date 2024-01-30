@@ -3,12 +3,15 @@ title: "Regridding acoustic data following spatial autocorrelation analysis"
 output: html_notebook
 ---
 
-### Background: 
-Because our data were collected continuously while underway at sea, and because marine organisms are often grouped in space and time according to ecological drivers, there is some spatial autocorrelation present in our data. This causes problems in terms of analysis, because our samples are not independent (which violates the assumptions of most statistical tests).
+# Objective of code:
+Regrid our acoustics data from continuous tracks (gridded in echoview to 100 m horizontal by 5 m vertical grid cells) to spatialy independent grid cell size (25 km)
 
-In Spatial autocorrelation.Rmd we created correlograms with our mesopelagic depth integrated values (echo_integration df) of 100m horizontal cells (<10 missing vertical cells) and found spatial autocorrelation within our data at approximately ~25km.
+# Background: 
+Because our data were collected continuously while underway at sea, and because marine organisms are often grouped in space and time according to ecological drivers, there is some spatial autocorrelation present in our data. This poses a challenge in subsequent statistical analysis, as our samples may not be considered independent (which violates the assumptions of most statistical tests).
 
-From the spatial autocorrelation analysis, a grid size of 25km would be appropriate for acoustic track data (in other words, at 25km, we should no longer have strong spatial autocorrelation in our data and our observations should represent a spatially independent sample). If we re-grid on this scale, the thought is that we would no longer be violating the assumptions of independence in our samples and can proceed with our statistical analysis. However, if we still see a strong spatial pattern in our residuals (both year comparison via kruskall wallis and GAM), may still need to include a spatial component. 
+In Spatial autocorrelation.Rmd we created correlograms with our mesopelagic depth integrated values (echo_integration df) of 100m horizontal cells (<10 missing vertical cells) and found mean spatial independence at approximately ~25km.
+
+From the spatial autocorrelation analysis, a grid size of 25km would be appropriate for acoustic track data (in other words, at 25km, we should no longer have strong spatial autocorrelation in our data and our observations should represent a spatially independent sample). If we re-grid on this scale, we should no longer be in violation of the assumptions of independence in our samples and can proceed with our statistical analysis. 
 
 # Load libraries
 ```{r load packages}
@@ -17,12 +20,10 @@ library(raster) # regridding
 library(tidyverse)#data wrangle and plotting
 ```
 
-A note on geographic coordinate systems: in order to create a spatial grid of a specific distance value (for ex. 5km), I can either keep my inputs in latitude longitude and try to convert our distances into degrees latitude and longitude, OR, convert from Lat Long geographic coordinate system into a projected coordinate system, create the grid of known size (for example UTM ZOne 19N for the core region of California, in meters), and then re-export in degrees latitude longitude (which is what I opted for because it felt more accurate but way more work).
+A note on geographic coordinate systems: in order to create a spatial grid of a specific distance value (for ex. 5km), I can either keep my inputs in latitude longitude and try to convert our distances into degrees latitude and longitude, OR, convert from Lat Long geographic coordinate system into a projected coordinate system, create a grid of known size (for example UTM Zone 19N for the core region of California, in meters), and then re-export in degrees latitude longitude. Here we opt for the latter since the conversion was more precisce. 
 
-NOTE: although I initially only integrate over water columns 100m horizontal with a maximum of 10 missing cells (ie 65 out of 75m at meso depths), I chose not to do so when we regridded over a larger area because any one area missing backscatter data will likely be compensated by surrounding values and when I looked at the individual echograms created in Read_clean, there didn't appear to be any regions of concern (ie where missing just DSL depths which might otherwise bias results). 
-
-# ADD columns to output df for calculating acoustic metrics
-Because we are using the df: output which is our 100m by 5m vertical grid data output from echoview, we need to calculate acoustic metrics from these data (otherwise taking the mean of means from echo_integration 150-525m felt inaccurate). To calculate the MVBS we need the linear mean of Sv (sv) (so convert from Sv (log scale) to sv (linear) and take mean and then re-convert) using the following conversions:
+# Add columns to output df for calculating acoustic metrics
+Because we are using the df: output which is our raw 100m by 5m vertical grid data output from echoview, we need to calculate acoustic metrics from these data (instead of calculating the mean of means). To calculate the MVBS we need the linear mean of Sv (sv) (so convert from Sv (log scale) to sv (linear) and take mean and then re-convert) using the following conversions:
 
 Sv to sv: Sv_to_sv <- function(Sv){10^(sv/10)}
 sv to Sv: sv_to_Sv <- function(sv){10*log10(sv)}
@@ -38,23 +39,15 @@ output <- output |>
           mutate(sv_cellht=MVBS_linear*5) #create additional column for sv * cell height (for calculating NASC)
 
 ```
-NOTE: because I am now calculating these acoustic metrics over a much bigger region (instead of individual 100m column of water, 1km, 5km etc) I am no longer going to select for water columns with less than 10 cells missing because this will be averaged over a larger region! To verify this, I looked at the individual echograms from Read clean and I didn't see too many errant values (tho i only calculated CM for those with at least 65 cells (<10 cells missing- the echograms that is) but generally I think it will be okay. (Jarrod also confirmed that this makes sense-not eliminating data from those columns with >10 cells missing when integrating over such a broad area)
+NOTE: because we are now calculating these acoustic metrics over a much bigger region (instead of individual 100m column of water, 1km, 5km etc) I am no longer going to select for those columns with less than 10 cells missing 
 
-For ref: in case we later wanted to assign quality control: In total, there were ~400 records of 30,000 that had less than 65 cells out of 75 vertically (between 150-525m)
-# create list of values missing more than 10 cells 
-output_remove <- output |> 
-                group_by(Year, Day, Interval, Lat_M, Lon_M) |> #group by a specific water column of water, include lat long data
-                summarize(n=n(), .groups = "drop") |> 
-                filter(n<65)
-
-### Create a grid based on acoustic data extent (specific grid size) 
+# Create grid based on acoustic data extent (specific grid size) 
 
 Use the output df (100m by 5m vertical cells) to set the extent and resolution of acoustic data 
-
 ```{r create raster grid based on acoustics extent}
 
 # create ONE grid for all years- can vary size of grid with dist input
-dist= 25000 # this value is in meters (so 5km = 5000m)
+dist= 25000 # this value is in meters (so 5km = 5000m, 25km=25000)
 
 # Convert acoustic data to an sf object------and then convert to projected coordinate system
 output_sf <- st_as_sf(x=output, coords=c('Lon_M','Lat_M'), remove = FALSE, crs=4326) #native GCS wgs84
@@ -69,14 +62,11 @@ res(r) <- c(dist, dist) # The units of UTM Zone 10N are meters (m) so 25km is 25
 ```
 
 # Regrid acoustics data to raster grid (of set distance, dist), based on acoustics extent-- Calculate MVBS
------------------------------------------------------------------------------------
 
 ```{r regrid acoustics to this raster grid}
 
 # create df to store output
 acoustics_regrid_utm <- data.frame()
-
-# select for a specific year?!!! And our mesopelagic depths: FOR LOOP IT?! 
 
 yr= unique(output$Year)
 
@@ -110,7 +100,6 @@ rm(echo_yr, x_yr, x_yr_df, i, yr)
 ```
 
 # Convert output from projected to cooridnate reference system (UTM Zone10N to Lat Lon)
---------------------------------------------------------------------------------------
 Using output from acoustics_regrid_utm
 crs=4326
 ```{r}
@@ -135,8 +124,8 @@ acoustics_regrid= as.data.frame(acoustics_regrid_sf_wgs) |>
 
 rm(acoustics_regrid_utm) #remove initial output from regrid
 ```
-# Create gridlines based on acoustic regrid output!
----------------------------------------------------
+# Create gridlines based on acoustic regrid output
+
 For selecting by specific grid cell and plotting purposes we need actual values for upper and lower boundaries of each cell
 We can adjust these to changing distance bins with (dist=) input
 
@@ -218,7 +207,6 @@ rm(grid_hi, grid_hi_sf, grid_hi_sf_wgs, grid_low, grid_low_sf, grid_low_sf_wgs )
 # and when all done:
 rm(acoustics_regrid_sf, acoustics_regrid_sf_wgs, acoustics_regrid_utm, grid_latlon, grid_latlon_sf, grid_latlon_sf_wgs)
 
-
 ```
 
 # Merge gridlines to acoustic regridded output
@@ -229,31 +217,19 @@ our output of the acoustic regridding (resolution determined by dist= input) and
 acoustics_regrid
 acoustics_regrid= left_join(acoustics_regrid, grid, by=c("lat", "lon"))
 ```
-HOORAY!!! we now have nice clean gridlines and cell values for each of our acoustic regridded data which will help facilitate joining to ctd data later
+We now have clean gridlines and cell values for each of our acoustic re-gridded data which will facilitate joining to ctd data later
 
-### Calculate additional acoustic metrics to regrided output: Center of Mass (CM)
+# Calculate additional acoustic metrics to regrided output: Center of Mass (CM)
 
-# Calculate Center of Mass (m)- integrated over 150m-550m
-CM <- function(z, Sv_z) {
-  sum(z*10^(Sv_z/10))/sum(10^(Sv_z/10))
-}
-
-- Whereas we were able to apply neat little functions to our output df to calculate additional acoustic metrics, with the rasterize function in the {raster} package, we are only allowed input for ONE variable. The workaround is to calculate intermediary steps as an additional column which we then sum over to regrid at different distances. 
-
-I added a column sv_z: mutate(sv_z=MVBS_linear*Depth_mean) to the output df
-
-
-Center of mass is thus calculated as: 
-sum(z*10^(Sv_z/10))/sum(10^(Sv_z/10)) 
+Center of Mass (m)- integrated over 150m-525m
 
 I first created a col for sv (converting Sv db into sv linear) "MVBS_linear"
 THEN, I calculated a new column called "sv_z" which is the product of sv (linear) multiplied by the mean depth per cell
 then using the sum(x) function, I first calculate the sum of sv_z (numerator) and then in a separate raster, sum of sv (MVBS_Linear)
-- Next, I export both rasters (convert to dataframe) and create a new column for sum(sv_z)/sum(sv) to calculate CM (m)
-Also a good check on grid export consistency- should have same centroid values in diff exports!
+- Next, I exported both rasters (convert to dataframe) and created a new column for sum(sv_z)/sum(sv) to calculate CM (m)
+Also a good check on grid export consistency- should have same centroid values between diff exports
 
-# Calculate CM for regrid 
-Calculate the sum of sv (linear) this is our denominator 
+# CM step 1: Calculate the sum of sv (linear) this is our denominator 
 ```{r CM : sum of sv}
 
 # FOR LOOP: generate CM output - try to calculate at same time?
@@ -310,7 +286,6 @@ rm(sv_sum_sf)
 This is the sum of the product of sv * mean depth per cell
 
 ```{r CM : step twp sum of sv_z}
-
 
 
 # FOR LOOP: generate CM output - try to calculate at same time?
@@ -385,7 +360,8 @@ acoustics_regrid <- left_join(acoustics_regrid, cm, by=c("lat", "lon", "year"))
 
 rm(cm, sv_z_sum, sv_sum) #remove intermediary dfs
 ```
-# Calculate NASC from vertical 5m binned data for regridded cells- calculate two ways as a check:
+# Calculate NASC from vertical 5m binned data for regridded cells- calculate two ways as a check-- Just for ref
+
 1. sum of NASC in output df and 2. sv*cell height summed multiplied by 4*pi(1852^2)
 using the new column we calculated for sv_cellht (which is SV converted to sv (linear: MVBS_linear) multiplied by our cell height of 5m)
 
@@ -442,15 +418,6 @@ NASC_output <- as.data.frame(st_drop_geometry(NASC_output_sf))
 rm(echo_yr, echo_yr_sf, x_yr, x_yr_df, NASC_output_sf)
 ```
 
-# Calculate gridded NASC
-method 2: 
-NASC <- function(Sv_z, cell_H){
- (sum(10^(Sv_z/10))*cell_H)* 4*pi*1852^2
-}
-NOTE: i also calculated NASC using the formula above but got 156 obs instead of 135, although values were the same, so going to go with the simple addition of all NASC values and not worry about additional calculation 
-x_yr<- raster::rasterize(x=echo_yr_sf, y=r, field=echo_yr_sf$sv_cellht, fun=function(x, ...) sum(x)*4*pi*1852^2) #calculate sum of NASC per cell
-NOTE: because NASC is an integration I think it is less robust to missing values. Not planning to use this, but it is here for reference! 
-
 # ADD NASC to our existing output
 Add NASC to exisitng datframe acoustics_regrid df
 
@@ -467,7 +434,7 @@ NOTE: when we calculate NASC we aren't taking into account that there are some m
 
 # Finally, calculate the total number of 100m horiztonal columns of water per grid cell.....
 
-The following uses our echointegrated df echo_integration_all which calculated acoustic metrics for each 100m horizontal water column of water from 150m to 525m. Unlike its original version, echo_integration which selected for only those water columsn with less than 10 cells missing per 100m (so at least 65 out of 75 cells per water column,) this version has ALL of the data even if only a few values were available per water columns. Because we are regridding to much larger grid cell sizes (1km, 5km, 10km and 20km), I don't think I need to have such a strict value for echo integrating over these larger grid cells, but the output in echo_integration_all may be a little wonky (another reason why I am interseted in looking at it). I am going to regrid these data to the same grid as our other layers whic hwas developed from the original raw output df (which makes sense as that is now consistent with these data)
+The following uses our echointegrated df echo_integration_all which calculated acoustic metrics for each 100m horizontal water column of water from 150m to 525m. Unlike its original version, echo_integration which selected for only those water columns with less than 10 cells missing per 100m (so at least 65 out of 75 cells per water column,) this version has ALL of the data even if only a few values were available per water columns. Because we are regridding to much larger grid cell sizes (1km, 5km, 10km and 20km), we aren't adding the same filter, but want to verify # of smaller cells per new regrid to examine.
 
 ```{r}
 # add a column to echo_integration_all for sv (ie convert from dB Sv to linear sv)
@@ -572,9 +539,9 @@ ggplot()+
 ```{r}
 {ggplot(data=acoustics_regrid)+
   geom_point(aes(x=lon, y=lat, fill=MVBS), size=4, shape=22)+
-  geom_text(aes(x=lon, y=lat, label=echo_count), size=2)+
+  geom_text(aes(x=lon, y=lat, label=echo_count), size=2)+ #text represents # of original cells per regrid cell
   scale_fill_viridis_c(alpha=0.7)+
-  geom_sf(data=states)+ #add basemap not good one
+  geom_sf(data=states)+ #add basemap 
   coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39 ))+ #this is based on extent(r) raster but not UTM projection?
   #scale_x_continuous(breaks = acoustics_regrid$lon_grid_low, minor_breaks = NULL)+
   #scale_y_continuous(breaks=acoustics_regrid$lat_grid_hi, minor_breaks = NULL)+
@@ -590,10 +557,6 @@ ggplot()+
 #ggsave(filename=paste0("./plots/regrid/regrid_", dist, "m", "_MVBS.pdf"))
 
 ```
-NOTE that at this fine resolution there are some cells with only 1 100m horiztonal water column that are defining the whole 25km cell. Will probably have to come up with a way to filter in these situations?! (echo_count) is the col name. Hmmmm
-
-
-Also note that for all the work it took to use the primary, output df to re-calcualte all of these acoustics metrics, they appear to be the same as the mean of means (eye roll) echo_MVBS
 
 # PLOT regridded acoustics output with gridlines
 ```{r}
@@ -618,7 +581,7 @@ ggplot(data=acoustics_regrid)+
 ggsave(paste0("./plots/regrid/acoustics_regrid_", "", dist, ".pdf"))
 ```
 
-# compare amount of data between years?
+# Compare number of orginial cells per regrid - between years
 ```{r}
 # calculate number of filled grid cells per 
 acoustics_regrid |> 
@@ -636,24 +599,23 @@ acoustics_regrid |>
   summarise(total_vertical=sum(count), total_horizontal=sum(echo_count), total_cells=n(), .groups="drop")
 ```
 
-TODO: even with 25km, there are some cells that are represented by only a single 100m horizontal cell. I should probbly come up with a way to filter these prior to analysis.
-
-
 
 # MANUAL STEP: save output to specific grid size! 
-Because I am re-gridding multiple times but don't want to change all of hte code above each time (only have to change the dist= input at the moment), I am saving each regrid output by cell size
+We re-gridding multiple times by changing dist= input at the moment but want to save regrid output specific to each cell size
 
 ```{r}
 acoustics_regrid_25km= acoustics_regrid
+
 ```
 
 Now re-run all of the code above but for the following grid sizes
-1km
-5km
-10km
-15km
-20km
-25km
+-- 1km
+-- 5km
+-- 10km
+-- 15km
+-- 20km
+-- 25km
+
 
 
 # PLOT for visual reference
@@ -686,9 +648,11 @@ ggplot(data=acoustics_regrid)+
 
 # clean up objects
 ```{r}
-rm(acoustics_regrid, ext, grid, i, yr)
+rm(acoustics_regrid, ext, grid, i, yr, dist)
 ```
 NOTE: leave df: r we will use this to re-grid oceanographic data from ctd in Ocean regrid.Rmd
+
+
 # NEXT.....
 Head to Analysis 1.Rmd (difference in biomass between years)
 
