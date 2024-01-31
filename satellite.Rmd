@@ -3,60 +3,20 @@ title: "Satellite data"
 output: html_notebook
 ---
 
-# Background:
+# Objective of code
 
-The following code is an attempt to include a measurement for light during our years of interest 2013-2018. 
-Unfortunately, the CTD only had data available for 3 of our 6 years (2013-2015, not 2016-2018), so we don't have direct in situ values available. We do however have satellite data! 
-Update: 06/0/23: Following conversation with Jerome about the fact that chl (from CTD, integrated over upper 100m), I thought I might try to see whether there was more of a relationsip with 8-day composite data from satellites as this better matched the time and location of acoustic tracks and would be a better represetation of light conditions over a broader area of the trasect. 
-
-# Challenges
-The current challenge is in deciding which dates and locations to extract data for. On an annual basis, I could simply extract the light levels for the month of may june, or the dates daily or weekly dates over which the survey occured and then extract kd490 values for those locations and dates?! Alternatively I could try to extract the specific time step per cell, but I am not sure how complicated I need to get here?! 
-
-# From Dale: 
-
-Hi Ilysa,
-Feel free to reach out to me with questions any time. Yes, Kd490 is one of the few measures of light attenuation at 490 nm.
-
-Ez = Eo e^(-Kd*Z)
-Where Eo is irradiance at the surface Ez is irradiance at depth Z. Or you can flip it around to get something like 1% light level at 490nm. 
-
-Z = -ln(Ez/Eo)/Kd, just put in 0.01 (1%) for Ez/Eo
-
-There are also equations to convert Kd490 to KdPAR if you are interested in photosynthesis. 
-e.g. https://archimer.ifremer.fr/doc/00117/22831/21496.pdf
-
-Does that help?
-
-Dale
-
-# Data products
-It looks like these data come from either the MODIS or VIIRS satellite. Both NOAA and NASA have made products for Kd490, but the NOAA version includes adjustments for turbidity nearshore (NASA more open water). I will have to poke around here.
-
-# NOAA data descriptions
-
-https://catalog.data.gov/dataset/diffuse-attenuation-coef-k490-aqua-modis-npp-0-0125a-west-us-2002-present-3-day-composite # a 3 day composite might not be a bad idea? This data is specific to the west coast which is good. 
-
-https://www.aoml.noaa.gov/phod/dhos/color_K490.php
-K490 (the diffuse attenuation coefficient at 490 nm) 
-
-K490 expresses how deeply visible light penetrates in the ocean and its value describes describes the extent to which the intensity of visible light (with wavelength equal to 490 nm) is reduced as it penetrates into the ocean. Higher K490 value mean smaller attenuation depth, and lower clarity of ocean water. 
-
-From https://eastcoast.coastwatch.noaa.gov/cw_olci_k490.php
-The authors describe the calculation as follows:
-
-The value of Kd490 represents the rate which light at 490 nm is attenuated with depth. For example a Kd490 of 0.1/meter means that light intensity will be reduced one natural log within 10 meters of water. Thus, for a Kd490 of 0.1, one attenuation length is 10 meters. Higher Kd490 value means smaller attenuation depth, and lower clarity of ocean water.
+Extract information about light from satellite data via ERDDAP (Aqua Modis satellite)
 
 
+# Background
+We did not have CTD light data available for all years of our study, and so the following code extracts satellite light data for the location of our acosutics tracks
 
-Daily, 8-day composite, monthly available
-in 4km grid cells
+8-day composite in 4km grid cells
 
 All products: https://coastwatch.pfeg.noaa.gov/erddap/search/index.html?page=1&itemsPerPage=1000&searchFor=kd490
 
-At the moment, I am tempted to use the NOAA VIIRS science quality 4km 2012-present data
 
-#conversion equation from Dale
-If i understand this correctly, I can calculate Z, the depth at which light 1% light level at 490nm
+#Calculate Z: depth at which light ~ 1% of surface at 490 nm
 ```{r}
 
 Z= function(per, Kd){-log(per)/Kd
@@ -65,12 +25,7 @@ Z= function(per, Kd){-log(per)/Kd
 # Trial: so if our Kd value was 0.1, the depth at which we get 1% light level is 46m
 Z(per=0.01, Kd=0.1)
 ```
-
-# NOW TO EXTRACT ERDDAP data directly from server
-
 # Load libraries
-# Install packages/ Load libraries 
-The following requires the rerddap package to access data 
 ```{r}
 # start by installing packages
 library(tidyverse) #data wrangling. possibly plotting via ggplot
@@ -84,36 +39,18 @@ library(cmocean) #great color palettes
 ```
 
 ### Using {RERDDAP} to extract data directly from ERDDAP servers
-Going to follow a vignette from RERDDAP
+References
 https://cran.r-project.org/web/packages/rerddap/vignettes/Using_rerddap.html
 https://docs.ropensci.org/rerddap/articles/Using_rerddap.html
+{xtractomatic} and {rerddapXtracto} used to extract k490 data from our exact acoustics track
+https://rmendels.github.io/UsingrerddapXtracto.html
 
-*note that there are additional complimentary packages for extracting erddap data in a track or grid
-{xtractomatic} and {rerddapXtracto} by Roy that I will use to extract k490 data from our exact acoustics track
-
-
-### Select ERDDAP dataset
-I originally ran all the subsequent code for 1-day composite data, but because of all the NAN values (likely due to cloud cover) I am going to try to use the 8 day composite data. From science quality MODIS, 4km diffuse attenuation 2003 to present
-
+# Select ERDDAP dataset
+8-day composite data (to avoid missing day for single day)
 https://coastwatch.pfeg.noaa.gov/erddap/griddap/erdMH1kd4908day.html
 
-# Extract data from specific acosutic track?! (8-day composite)
-I am thinking the easiest way to do this MIIIIGHT be using Roy's code?!
-Roy's guide to using the package
-https://rmendels.github.io/UsingrerddapXtracto.html
-developed to extract data along a track (for tagged animals) perfect use of these data if you ask me! 
-
-data info:
-k490_info <- rerddap::info('erdMH1kd4908day') # 8 day composite data
-
-
-
 # rerddapXtracto: to extract light data for acoustic track (8-day composite)
-
-```{r extract data from acoustic track via erddapxtracto}
-#load package
-library(rerddapXtracto)
-
+```{r}
 # select rerddap dataset
 k490_info <- rerddap::info('erdMH1kd4908day') # 8 day composite data
 
@@ -134,14 +71,8 @@ k490_track= rerddapXtracto::rxtracto(dataInfo=k490_info, parameter="k490", xcoor
 
 # note xlen and ylen set to 0.1 which is search for nearest point 0.1 ~ 11km or at the resolution of 4m a little over 2 cells
 ```
-Documentation from https://coastwatch.pfeg.noaa.gov/projects/r/xyt-matchup.html coastwatch:
-Define the search “radius” for the gridded data. The rxtracto function allow you to set the size of the box used to collect data around the track points using the xlen and ylen arguments. The values for xlen and ylen are in degrees. For our example we 0.2 degrees for both arguments. Note: You can also submit vectors for xlen and ylen, as long as the are the same length as xcoord, ycoord, and tcoord
 
-0.1 degrees I believe is about 11km ish which should be the surrounding few cells! However, when i ran this code with an x and y lens of 0.1 it seems to have started at the lower boundary of the bounding box, so all data is shifted left horizontally. More importantly, it didn't seem to add any additional data compared to the original extraction without the bounding box buffer, so I am sticking with the original. 
-
- accessing data from the list output
- 
- # Clean up output and convert to dataframe-- calculate Z from k490
+#Clean up output and convert to dataframe-- calculate Z from k490
 ```{r}
 #k490_track[[1]] #k490 mean values 
 
@@ -171,7 +102,7 @@ k490_track_df$lat <- as.numeric(k490_track_df$lat)
 k490_track_df= k490_track_df |> 
   mutate(time_2= stringr::str_sub(time, "1", "10")) |> 
   mutate(time=lubridate::ymd(time_2)) |> 
-  select(-time_2)
+  dplyr::select(-time_2)
 
 # filter for no na values
 k490_track_df= k490_track_df |> 
@@ -193,9 +124,7 @@ range(k490_track_df$Z) # note that this range goes from 1.2 to 90 m?!! I would h
 
 # PLOT DATA-- Plot of light levels overlaid acoustic track data 
 
-Note that this lines up fairly well, but has a few missing data values for some regions. Hopefully there is still enough data available 
-
-```{r plot of 8day composite data}
+```{r}
 str(k490_track_df)
 
 # plot cover of kd490 data per day 
@@ -213,18 +142,6 @@ ggplot()+
 
 ```
 # Compare irradiance between years-- Ignore below, but leaving for ref
-NOTE: code below compares the raw satellite values but if you go to Analysis 2 plots.Rmd, I create simple boxplots between years for the variable Z regridded in 25km (which is what i want)
-k490 "represents the rate whic light at 490 nm is attenuated with depth"
-for example a Kd490 of 0.1/meter means that light intensity will be reduced one natural log within 10 m of water
-
-"Diffuse attenuation coefficient (k490) directly realted to the presence of scattering particles in the water column either organic or inorganic, and thus is an idication of water clarity"
-
-"The diffuse attenuation coefficient at 490 nm indicates the turbidity of the wter column- hos visible light in the blue to green region ... penetrates within the water column. Higher kd490 value means smaller attenuation depth, and lower clarity of ocean water "https://eastcoast.coastwatch.noaa.gov/cw_k490_hires.php
-
-ie: higher values, lower clarity of water
-ie: lower values, higher clarify of water
-
-2016 espsecially stands out
 ```{r}
 
 # summarize mean light between years
@@ -273,10 +190,7 @@ ggplot(data=k490_track_df, aes(x=year, y=Z))+
 
 ```
 
-
-
 # PLOT of depth at which light is 1% of surface
-
 ```{r}
 # plot 1% light level (based on kd490)
 ggplot()+
@@ -285,25 +199,14 @@ ggplot()+
   geom_point(data=echo_integration_all, aes(x=Lon_M, y=Lat_M), color="gray")+ # our acoustic tracks for location info
   geom_point(data=k490_track_df, aes(x=lon, y=lat, color=Z))+  # Z is the depth at which light is 1% of surface
   cmocean::scale_color_cmocean(name="deep", direction=1)+
-  scale_x_continuous(breaks = round(acoustics_regrid$lon_grid_low,1), minor_breaks = NULL)+ # grid lines
-  scale_y_continuous(breaks= round(acoustics_regrid$lat_grid_hi,1), minor_breaks = NULL)+ # grid lines 
+  scale_x_continuous(breaks = round(acoustic_regrid$lon_grid_low,1), minor_breaks = NULL)+ # grid lines
+  scale_y_continuous(breaks= round(acoustic_regrid$lat_grid_hi,1), minor_breaks = NULL)+ # grid lines 
   theme(panel.grid = element_line(colour = "black", linetype = "solid"),
         panel.background = element_blank())+
   facet_wrap(~year)
   
 ggsave("./plots/light_tracks.pdf")
 ```
-WARNING: for some reason this sometimes plots with wonky, unevenly spaced line, whereas othertimes it seems to plot properly. It is not entirely necessary to have proper lines here, I think it is a plotting error rather than a underlying data issue. 
-
-
-After all of this.... this is great, however, there is a little bit of acoustics data that is missing some associated light data :( I am not sure why this is missing and whether perhaps it has something due to clouds, or date or some other condition with the data. I could try to resolve this by attempting to use the monthly data?! But monthly data compared to 8-day composite data obscures the more weekly patterns and may no longer be representative. At the 25km level, I am just going to hope that there will be mean values over this range! 
-
-
-NOTE: I could also select these data for each year separately using the downloaded version of these data?! 
-
-For now, I am going to join to the existing acoustics_ctd df and see how many cell are missing (Fingers crossed!!)
-
-
 # Regrid these depth at which light = 1% values to our grid....
 This is code I am stealing and updating from my own previous code Ocean regrid.Rmd
 
@@ -320,8 +223,8 @@ res(r)
 # FOR LOOP: For each unique year of CTD data (and acoustics)
 yr= unique(k490_track_df$year)
 
-# MANUAL::: create df to store output in
-light <- data.frame() # MANUAL!!!!
+# Create df to store output in
+light <- data.frame()
 
 for(i in 1:length(yr)){
   #filter for given year
@@ -358,7 +261,7 @@ light_sf <- st_transform(light_sf, crs=4326)# Convert coordinate system from utm
   light_sf <- light_sf |> 
               dplyr::mutate(lon = sf::st_coordinates(light_sf)[,1],
               lat = sf::st_coordinates(light_sf)[,2]) |> 
-              select(-geometry)
+              dplyr::select(-geometry)
 
                 
 # convert from sf back to  dataframe
@@ -370,12 +273,12 @@ rm(light_yr, light_yr_sf, x_yr, x_yr_df) #output from for loop
 
 ```
 
-
+# ILY YOU ARE HERE: JOIN
 # Now join our re-gridded light data to our existing oceanographic variables
 
 ```{r}
 # join light to acoustics_ctd data
-#first conver from character to numeric 
+#first convert from character to numeric 
 light$year <- as.numeric(light$year)
 # join to existing oceanographic variables 
 acoustics_ctd= left_join(acoustics_ctd, light, by=c("year", "lat", "lon")) #Join density at 150m
@@ -383,225 +286,20 @@ acoustics_ctd= left_join(acoustics_ctd, light, by=c("year", "lat", "lon")) #Join
 rm(light, k490_track_df, k490_track)
 ```
 
-OH NO!! Unforutnatley there are 3 additional cells that are missing light information :( boo hoo! I don't want to remove any additional cells here, but for GAM we have to have a value for each cell I beleive :(
-
-Currrently have 91 cells, and if we remove those missing light data we are left with....
-
-
-# WHOA!!! I now have ALL of my oceanographic variables linked to acoustics data!
-Next step is removing any cells that are missing data entirely.... 
-such as the dynamic height value that was removed when I got rid of the 3rd std dev outliers
+# Remove rows with missing light info
+Now df: acoustics_ctd: ALL oceanographic variables linked to acoustics data
 
 ```{r}
 
 acoustics_ctd= acoustics_ctd |> 
                 dplyr::filter(!is.na(Z))
-# OH NO! there are now 3 additional cells that lack light information :( 
-# but wait... for some reason all of the CTD variables have already been removed?!!! I must have accidentally deleted the previous version of this df wha wha... at least it is possible that in fact that same cells that we are missing ctd data for are the same as those that are lacking light data. That said, if not, then I might have to manually find light data 
-
 
 ```
 
-# TOTAL OF 88 cells that have acoustics data, CTD data and satellite light data
+Total of 88 cells that have acoustics data, CTD data and satellite light data
 
-
-- I could double check that GAMs need a value for each cell
-- I could re run all of this code with a different acoustics_regrid value (use cells slightly smaller than 25km?) 15km and 20km had the same results in analysis # 1 i believe, could re-run with one of those cells?! 
-
-#########################################################################################################################
-# CHLOROPHYLL::: 
-Based on convo with Jerome, it may make more sense to extract chl-a data at the same time step (8-day composite) as light data instead of very descrete samples via CTD 
-
-# rerddapXtracto: to extract chl (npp- net primary productivity) data for acoustic track (8-day composite)
-
-https://coastwatch.pfeg.noaa.gov/erddap/griddap/erdMH1chla8day.html
-Eight day compositie data from AQUA modis satellite (science quality) km- 2003 to present --same as light (k490) data
- Dataset ID: erdMH1chla8day
- 
- NOTE: i did the leg work above to set the appropriate columns for date and time 
- 
-```{r extract data from acoustic track via erddapxtracto for chlorophyll}
-#load package
-library(rerddapXtracto)
-
-# select rerddap dataset
-npp_info <- rerddap::info('erdMH1chla8day') # 8 day composite data for net primary production npp
-npp_info # variable "chlorophyll" units mg/m^3
-
-# use extracto to extract k490 for our survey data! 
-npp_track= rerddapXtracto::rxtracto(dataInfo=npp_info, parameter="chlorophyll", xcoord=echo_integration_all$Lon_M, ycoord=echo_integration_all$Lat_M, tcoord = echo_integration_all$time) #xlen = 0.1, ylen=0.1 to increase search area but shifted data only use if need didn't seem to add any data 
-
-# note xlen and ylen set to 0.1 which is search for nearest point 0.1 ~ 11km or at the resolution of 4m a little over 2 cells
-```
- 
-# Clean up output 
-Woudl like to convert from list to dataframe for plotting/manipulating
-$ mean chlorophyll
-```{r}
-#npp_track[[1]] #chl means 
-str(npp_track)
-
-#extract data to make df
-chl= npp_track$`mean chlorophyll` #npp mean
-time=npp_track$`satellite date` # time
-lon=npp_track$`requested lon min` # lon
-lat=npp_track$`requested lat min` # lat not could be either min or max it looks like bc same
-#NOTE; choosing mean instead of median chl which is also available
-
-# convert to dataframe
-chl_track_df= as.data.frame(cbind(chl, time, lon, lat))
-rm(chl, time, lon, lat)
-
-# need to make a column for year
-chl_track_df= chl_track_df |> 
-  mutate(year=lubridate::year(time)) 
-
-chl_track_df$year= as.character(chl_track_df$year) # convert to character to match acoustics_ctd df 
-
-# Convert values to numeric where necessary
-chl_track_df$chl <- as.numeric(chl_track_df$chl)
-chl_track_df$lon <- as.numeric(chl_track_df$lon)
-chl_track_df$lat <- as.numeric(chl_track_df$lat)
-
-
-# convert time from character to ymd
-# first remove additional information from erddap format
-
-chl_track_df= chl_track_df |> 
-  mutate(time_2= stringr::str_sub(time, "1", "10")) |> 
-  mutate(time=lubridate::ymd(time_2)) |> 
-  select(-time_2)
-
-# filter for no na values
-chl_track_df= chl_track_df |> 
-  filter(!is.na(chl))
-
-
-#check on str of df
-str(chl_track_df)
-class(chl_track_df$time)
-
-```
-# PLOT DATA-- Plot of chlorophyll levels overlaid acoustic track data 
-
-Note that this lines up fairly well, but has a few missing data values for some regions. Hopefully there is still enough data available 
-
-```{r plot track of chl}
-str(chl_track_df)
-
-# plot cover of kd490 data per day 
-ggplot()+
-  geom_sf(data=states)+ # add a basemap
-  coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39))+ #study region
-  geom_point(data=echo_integration_all, aes(x=Lon_M, y=Lat_M), color="gray")+
-  geom_point(data=chl_track_df, aes(x=lon, y=lat, color=chl))+
-  cmocean::scale_color_cmocean(name="algae", direction=1)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank(),
-        #panel.grid = element_line(colour = "black", linetype = "solid"),
-        panel.background = element_blank())+
-    facet_wrap(~year)
-
-```
-
-# Regrid satellite data - CHL  
-```{r regrid chl data to acoustic grid}
-
-# check resolution of raster layer : should be 25000 and 25000
-res(r)
-
-# ensure the grids from acosutics_regrid are appropriate for this size (ex. 20km)
-#acoustics_regrid= acoustics_regrid_25km #only do once or will overwrite
-
-
-# FOR LOOP: For each unique year of CTD data (and acoustics)
-yr= unique(chl_track_df$year)
-
-# MANUAL::: create df to store output in
-chl <- data.frame() # MANUAL!!!!
-
-for(i in 1:length(yr)){
-  #filter for given year
-  chl_yr <- chl_track_df |> 
-             filter(year==yr[i]) #select for one year at a time
-             
-  # convert to sf object
-  chl_yr_sf <- sf::st_as_sf(x=chl_yr, coords=c('lon','lat'), remove = FALSE, crs=4326) #sf object with lat lon coord system
-  chl_yr_sf <- sf::st_transform(chl_yr_sf, crs=32610)# Convert to projected coordinate system (UTM Zone 10N, datum: WGS84) to match raster r
-  
-  # rasterize our CTD data to our acoustics grid (r) created previously (of distance dist=)
-  x_yr<- raster::rasterize(x=chl_yr_sf, y=r, field=chl_yr_sf$chl, fun=function(x,...) c(length(x), mean(x, na.rm=TRUE))) #MANUAL 
-  #this returns the mean value at 150m per cell. In those cases where there were only one CTD, this should just be that single value
-  
-# convert raster output to dataframe object
-x_yr_df<- raster::as.data.frame(x=x_yr, xy=TRUE, centroids=TRUE, na.rm=TRUE) 
-x_yr_df <- x_yr_df |> 
-  rename(lon=x, lat=y, count_sat_pts=layer.1, chl=layer.2) |> #rename col names based on their true values: length and identity (value at 150m)
-  mutate(year=yr[i]) #create col for year for when we merge later
-  
-
-# store output to df
-chl <- rbind(chl, x_yr_df) #MANUAL
-
-}
-
-
-# note this output ctd_temp_cm is in UTM Zone 10N- need to convert back to WGS 84: LAT LON coordinate reference system -- # MANUAL
-chl_sf <- st_as_sf(x=chl, coords=c('lon','lat'), remove = FALSE, crs=32610) # convert to SF object with UTM Zone 10N
-chl_sf <- st_transform(chl_sf, crs=4326)# Convert coordinate system from utm zone 10N back to WGS 84 (Lon Lat)
-
-# break geometry column into two columns for lon and lat
-
-  chl_sf <- chl_sf |> 
-              dplyr::mutate(lon = sf::st_coordinates(chl_sf)[,1],
-              lat = sf::st_coordinates(chl_sf)[,2]) |> 
-              select(-geometry)
-
-                
-# convert from sf back to  dataframe
-chl <- as.data.frame(st_drop_geometry(chl_sf))
-
-#remove intermediary dfs
-rm(chl_sf) #no longer need this sf since we converted to df
-rm(chl_yr, chl_yr_sf, x_yr, x_yr_df) #output from for loop
-
-```
-
-
-# Now join our re-gridded chl data to our existing oceanographic variables
-
-```{r}
-# join light to acoustics_ctd data
-#first convert year from character to numeric 
-chl$year <- as.numeric(chl$year)
-# join to existing oceanographic variables 
-acoustics_ctd= left_join(acoustics_ctd, chl, by=c("year", "lat", "lon")) #Join density at 150m
-
-rm(chl, chl_track_df)
-```
-
-
-# WHOA!!! I now have ALL of my oceanographic variables linked to acoustics data!
-Next step is removing any cells that are missing data entirely.... 
-but as we already did this for the light data, there aren't any additional cells missing data, we have out 88, 25 by 25km cells 
-```{r}
-
-acoustics_ctd= acoustics_ctd |> 
-                dplyr::filter(!is.na(chl))
-# OH NO! there are now 3 additional cells that lack light information :( 
-# but wait... for some reason all of the CTD variables have already been removed?!!! I must have accidentally deleted the previous version of this df wha wha... at least it is possible that in fact that same cells that we are missing ctd data for are the same as those that are lacking light data. That said, if not, then I might have to manually find light data 
-
-
-```
-
-Now going to see how these data stack up against light and include in our model as a covariate....
-
-
-
-
-
-
-
+# Next
+...
 
 
 

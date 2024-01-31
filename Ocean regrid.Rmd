@@ -3,14 +3,10 @@ title: "Regrid CTD data by 25 25 km cells"
 output: html_notebook
 ---
 
-# TO DO : while aboard the RV Shimada
-I am re-running all of this code to ensure its up to date and then adding satellite data (for some reason acoustics_ctd was removed so have to re-run code! )
-
-
-Background: the following code extracts CTD data for each re-gridded acoustic data cell (25km by 25km). This is different from Ocean data.rmd which processes all of the CTD data (visualizing profiles, smoothing data, calculating spice etc.) as well as Regrid.Rmd which re-gridded all of the acoustics data.
+# Objective of code:
+the following code extracts CTD data for each re-gridded acoustic data cell (25km by 25km). This is different from Ocean data.rmd which processes all of the CTD data (visualizing profiles, smoothing data, calculating spice etc.) as well as Regrid.Rmd which re-gridded all of the acoustics data.
 
 # CTD variables:
-
 I am interested in re-gridding the following CTD data:
 - Temperature (150m, 500m, CM depth)
 - Salinity (150m, 500m, CM depth)
@@ -20,13 +16,10 @@ I am interested in re-gridding the following CTD data:
 - Dyn-height (at 500m, anomaly)
 
 and calculating
-- depth of 26.0 isopycnal
-- depth where oxygen concentration reaches 0.5 ml/l
 - dynamic height anomalies (at 500m) 
 - the overall mean center of mass (CM) for all cells and years (25km by 25km)
 
 # Calculate the mean CM depth
-I originally extracted each of our oceanographic variables at the unique center of mass depth per cell. However, this caused some confounding in the subsequent GAM as each variable is structured by depth and so then selecting for CM depth (while a great fit of the data) was a bit like cheating. Ie temperature varies with depth, so the temperature at the CM depth was bound to be correlated. As an alternative, Jerome suggested just taking the mean of all CM values (all cells and years) and then extracting variable value at this depth (the plus is that it is consistent and not cell specific)
 
 ```{r mean cm 25km cells}
 mean(acoustics_regrid_25km$cm_m) #313.73m which we can round to the nearest 2m bin == 314m
@@ -40,7 +33,6 @@ acoustics_regrid_25km |>
 ```
 
 # REGRID CTD DATA
-
 
 # Regrid CTD data - TEMPERATURE at 150m
 IMPORTANT NOTE: I am using the SAME grid developed for our acoustics data (with removed filter for # of cells per column of water). As such, the raster grid input "r" depends on the input to Regrid.Rmd, so ensure you have the correct grid cell size prior to running the following code!!! 
@@ -101,7 +93,7 @@ ctd_temp_150m_sf <- st_transform(ctd_temp_150m_sf, crs=4326)# Convert coordinate
 ctd_temp_150m_sf <- ctd_temp_150m_sf  |> 
               dplyr::mutate(lon = sf::st_coordinates(ctd_temp_150m_sf)[,1], # extract lon from geometry col
               lat = sf::st_coordinates(ctd_temp_150m_sf)[,2]) |>  #extract lat from geometry col
-              select(-geometry)
+              dplyr::select(-geometry)
 
 
 # convert from sf back to  dataframe
@@ -112,9 +104,7 @@ rm(ctd_temp_150m_sf) #no longer need this sf since we converted to df
 rm(ctd_yr, ctd_yr_sf, x_yr, x_yr_df) #output from for loop
 
 ```
-HMMM it is strange to me that there aren't any cells with only ONE ctd value? Not even one? this feels strange!
-Turns out, when I calculated an additional metric for each re-grid (not just the mean temperature, but ALSO the sd of temperature per cell, it inflated our total count by 1. I thus created an additional column to correct for this. It turns out the length(x) function is sensitive to the order you place it within the function call, so keep it first and use counts_true from here on out! 
--- Weird things happen when i try to calculate the sd() and take counts, so if I need these values later, I will just have to calculate them seperately with sd and se=sd/sqrt(n)
+
 # Regrid CTD data - TEMPERATURE at 314m (CM)
 ```{r CTD: temperature at CM depth 314 m}
 
@@ -166,7 +156,7 @@ ctd_temp_cm_sf <- st_transform(ctd_temp_cm_sf, crs=4326)# Convert coordinate sys
 ctd_temp_cm_sf <- ctd_temp_cm_sf |> 
                       dplyr::mutate(lon = sf::st_coordinates(ctd_temp_cm_sf)[,1], # extract lon from geometry col
               lat = sf::st_coordinates(ctd_temp_cm_sf)[,2]) |>  #extract lat from geometry col
-              select(-geometry)
+              dplyr::select(-geometry)
 
 
 # convert from sf back to  dataframe
@@ -227,7 +217,7 @@ ctd_temp_500m_sf <- st_transform(ctd_temp_500m_sf, crs=4326)# Convert coordinate
 ctd_temp_500m_sf <- ctd_temp_500m_sf |> 
                       dplyr::mutate(lon = sf::st_coordinates(ctd_temp_500m_sf)[,1], # extract lon from geometry col
               lat = sf::st_coordinates(ctd_temp_500m_sf)[,2]) |>  #extract lat from geometry col
-              select(-geometry)
+              dplyr::select(-geometry)
 
 
 # convert from sf back to  dataframe
@@ -291,7 +281,7 @@ ctd_temp_10m_sf <- st_transform(ctd_temp_10m_sf, crs=4326)# Convert coordinate s
 ctd_temp_10m_sf <- ctd_temp_10m_sf |> 
                       dplyr::mutate(lon = sf::st_coordinates(ctd_temp_10m_sf)[,1], # extract lon from geometry col
               lat = sf::st_coordinates(ctd_temp_10m_sf)[,2]) |>  #extract lat from geometry col
-              select(-geometry)
+              dplyr::select(-geometry)
 
 
 # convert from sf back to  dataframe
@@ -303,23 +293,11 @@ rm(ctd_yr, ctd_yr_sf, x_yr, x_yr_df) #output from for loop
 
 ```
 
-#the following two chunks added II 5/31/23: just for reference
-# because I am doing this out of order, just going to add to df here, but otherwise add later! 
+
 ```{r}
 ctd_temp_10m= ctd_temp_10m |> 
-              select(-count_ctds)
+              dplyr::select(-count_ctds)
 #acoustics_ctd= left_join(acoustics_ctd, ctd_temp_10m, by=c("lat", "lon", "year"))
-```
-
-
-# temperature gradients?
-
-Jarrod suggested possibly examining a gradient of temperature? Given the challenges I have had with collinarity and concurvity, perhaps it might make sense to include? I might play around with an additional term for the difference in temperature from 150m to cm (314m)?
-Not going to use, but leaving for reference
-```{r}
-acoustics_ctd=acoustics_ctd |> 
-  mutate(temp_diff=temp_150m-temp_cm)
-
 ```
 
 
@@ -376,7 +354,7 @@ ctd_o2_150m_sf <- st_transform(ctd_o2_150m_sf, crs=4326)# Convert coordinate sys
 ctd_o2_150m_sf <- ctd_o2_150m_sf |> 
                       dplyr::mutate(lon = sf::st_coordinates(ctd_o2_150m_sf)[,1], # extract lon from geometry col
                       lat = sf::st_coordinates(ctd_o2_150m_sf)[,2]) |>  #extract lat from geometry col
-                      select(-geometry)
+                      dplyr::select(-geometry)
 
 
 # convert from sf back to  dataframe
@@ -441,7 +419,7 @@ ctd_o2_cm_sf <- st_transform(ctd_o2_cm_sf, crs=4326)# Convert coordinate system 
 ctd_o2_cm_sf <- ctd_o2_cm_sf |> 
                       dplyr::mutate(lon = sf::st_coordinates(ctd_o2_cm_sf)[,1], # extract lon from geometry col
                       lat = sf::st_coordinates(ctd_o2_cm_sf)[,2]) |>  #extract lat from geometry col
-                      select(-geometry)
+                      dplyr::select(-geometry)
 
 
 # convert from sf back to  dataframe
@@ -452,8 +430,6 @@ rm(ctd_o2_cm_sf) #no longer need this sf since we converted to df
 rm(ctd_yr, ctd_yr_sf, x_yr, x_yr_df) #output from for loop
 
 ```
-
-
 
 # Regrid CTD data - OXYGEN at 500m
 25km by 25km grid cell 
@@ -508,7 +484,7 @@ ctd_o2_500m_sf <- st_transform(ctd_o2_500m_sf, crs=4326)# Convert coordinate sys
 ctd_o2_500m_sf <- ctd_o2_500m_sf |> 
                   dplyr::mutate(lon = sf::st_coordinates(ctd_o2_500m_sf)[,1], # extract lon from geometry col
                   lat = sf::st_coordinates(ctd_o2_500m_sf)[,2]) |>  #extract lat from geometry col
-                  select(-geometry)
+                  dplyr::select(-geometry)
 
 
 # convert from sf back to  dataframe
@@ -576,7 +552,7 @@ ctd_den_150m_sf <- st_transform(ctd_den_150m_sf, crs=4326)# Convert coordinate s
 ctd_den_150m_sf <- ctd_den_150m_sf |> 
                   dplyr::mutate(lon = sf::st_coordinates(ctd_den_150m_sf)[,1], # extract lon from geometry col
                   lat = sf::st_coordinates(ctd_den_150m_sf)[,2]) |>  #extract lat from geometry col
-                  select(-geometry)
+                  dplyr::select(-geometry)
 
 
 # convert from sf back to  dataframe
@@ -642,7 +618,7 @@ ctd_den_cm_sf <- st_transform(ctd_den_cm_sf, crs=4326)# Convert coordinate syste
 ctd_den_cm_sf <- ctd_den_cm_sf |> 
                   dplyr::mutate(lon = sf::st_coordinates(ctd_den_cm_sf)[,1], # extract lon from geometry col
                   lat = sf::st_coordinates(ctd_den_cm_sf)[,2]) |>  #extract lat from geometry col
-                  select(-geometry)
+                  dplyr::select(-geometry)
 
 
 # convert from sf back to  dataframe
@@ -709,7 +685,7 @@ ctd_den_500m_sf <- st_transform(ctd_den_500m_sf, crs=4326)# Convert coordinate s
 ctd_den_500m_sf <- ctd_den_500m_sf |> 
                   dplyr::mutate(lon = sf::st_coordinates(ctd_den_500m_sf)[,1], # extract lon from geometry col
                   lat = sf::st_coordinates(ctd_den_500m_sf)[,2]) |>  #extract lat from geometry col
-                  select(-geometry)
+                  dplyr::select(-geometry)
 
 
 # convert from sf back to  dataframe
@@ -724,7 +700,7 @@ rm(ctd_yr, ctd_yr_sf, x_yr, x_yr_df) #output from for loop
 # Regrid CTD data - Chlorophyl-- depth integrated upper 100m
 25km by 25km grid cell 
 
-NOTE: these data were smoothed by the preceding and suceeding cell (2m above and below) variable: chl_smooth
+NOTE: these data were smoothed by the preceding and succeeding cell (2m above and below) variable: chl_smooth
 
 ```{r CTD: chl depth integrated to 100m}
 
@@ -777,7 +753,7 @@ ctd_chl_100m_sf <- st_transform(ctd_chl_100m_sf, crs=4326)# Convert coordinate s
 ctd_chl_100m_sf <- ctd_chl_100m_sf |> 
                    dplyr::mutate(lon = sf::st_coordinates(ctd_chl_100m_sf)[,1], # extract lon from geometry col
                     lat = sf::st_coordinates(ctd_chl_100m_sf)[,2]) |>  #extract lat from geometry col
-                    select(-geometry)
+                    dplyr::select(-geometry)
 
 
 # convert from sf back to  dataframe
@@ -793,12 +769,8 @@ NOTE: count_ctds values not reflective of total number of CTDs (rather total num
 # Regrid CTD data - DYNAMIC HEIGHT ANOMALIES at 500m
 25km by 25km grid cell 
 
-Following my latest meeting with Jerome, I am planning to calculate a dynamic height anomaly as the dynamic height at 500m -mean dynamic height of all ctd casts at 500m. Based on info from Keith, i believe this makes sense (referenced to 500m). Jerome and I spent a lot of time workshoping this in his office (notes were pulled out of drawers, plots were made, equations made sense of). I think what happened here is that the dynamic height values were referenced to a mean sea surface height value (?) I am still a little confused, but I think this is the right thing to do. This varies from our original plan to look at dynamic height values at the surface (and were missing some surface info- which Jerome said wouldn't be an issue if we use values at 500m)
-
 #Calculate mean dynamic height at 500m
 The mean value of dynamic height at 500m for all ctd casts (all locations, years)
-
-I took a quick peek at "The physical oceanography off the central california coast during may-june, 2000: a summary of ctd data from pelagic juvenile rockfish surveys" March 2002 NOAA tech memo (in Zotero) and they mention 500m for dynamic height and created plots with 0.00 decimal places
 ```{r}
 # Filter for dynamic height at 500m 
 dyn_ht_500= ctd_deep_data_core |> 
@@ -816,23 +788,12 @@ summarise(dy_ht=mean(DYN_HGT), .groups = 'drop')
 
 #rm(dyn_ht_500)
 ```
-
-
-# Look for OUTLIERS-- THEN I ALREADY UPDATED THE RE_GRID CODE ABOVE TO REMOVE THESE TWO CASTS
-II as of April 28th, 2023 this is still something you have to do!!
-When I ran a preliminary GAM it looked like there were a couple errant value that were skewing our output. 
-Need to ensure that these values are removed if they are not correct. How do we know?
-jerome had suggested removing values above 3 std dev from the mean - which is what i do here
+#REmove dyn_ht outliers (> 3std from mean)
 This leads to the removal of TWO dynamic height values at 500m:
-
 2016: CTD_IDEX 184 (dynamic height value of 2.48m which seems pretty high indeed)
 2017: CTD_INDEX 28 (dyanamic height of 1.3)
 JUST for reference! The code below for re-grid automatically removes our two problematic values 
 ```{r}
-# look for re-gridded data stored in acoustics_ctd (this is dynamic height anomalies) OR do 
-# for dyamic height data, see dyn_ht_500? Otherwise, we will be looking at mean values
-# HMMM Should I look at anomaly data for calculating 3 sds or actual raw measurements. I am tempted to use raw measurement data
-# the following is the dynamic height data at 500m for all years, stations
 
 mean(dyn_ht_500$DYN_HGT) # 0.8208654
 sd(dyn_ht_500$DYN_HGT) #0.130607
@@ -845,8 +806,7 @@ mean(dyn_ht_500$DYN_HGT)+sd(dyn_ht_500$DYN_HGT)
 mean(dyn_ht_500$DYN_HGT)+3*sd(dyn_ht_500$DYN_HGT) # 1.212
 mean(dyn_ht_500$DYN_HGT)-3*sd(dyn_ht_500$DYN_HGT) #0.4290444
 
-# so if any of our values are less than 0.4 or greater than 1.2, likely outliers?! 
-
+# so if any of our values are less than 0.4 or greater than 1.2, we consider them here to be outliers
 
 # plot 
 ggplot(data=dyn_ht_500) +
@@ -862,18 +822,10 @@ geom_boxplot()+
 
 # which values of dynamic height appear to be way outside the range of the study
 
-
-# REMOVE outliers of dynamic height--- will have to check if this means we have less overall cells availbale for analysis....
+# REMOVE outliers of dynamic height
 dyn_ht_500= dyn_ht_500 |> 
  dplyr::filter(!(Year==2017 & CTD_INDEX==28)) |> 
   dplyr::filter(!(Year==2016 & CTD_INDEX==184))
-
-
-# compare between years
-
-ctd_dyn_ht_500m |> 
-  group_by(year) |> 
-  summarise(dyn_ht=mean(dyn_ht_500m))
 
 ```
 
@@ -939,7 +891,7 @@ ctd_dyn_ht_500m_sf <- st_transform(ctd_dyn_ht_500m_sf, crs=4326)# Convert coordi
 ctd_dyn_ht_500m_sf <- ctd_dyn_ht_500m_sf |> 
                   dplyr::mutate(lon = sf::st_coordinates(ctd_dyn_ht_500m_sf)[,1], # extract lon from geometry col
                   lat = sf::st_coordinates(ctd_dyn_ht_500m_sf)[,2]) |>  #extract lat from geometry col
-                  select(-geometry)
+                  dplyr::select(-geometry)
 
 
 # convert from sf back to  dataframe
@@ -951,11 +903,8 @@ rm(ctd_yr, ctd_yr_sf, x_yr, x_yr_df) #output from for loop
 
 ```
 
-# JOIN OUR OCEANOGRAPHIC VARIABLES TO ACOUSTICS DATA
+# Join ALL OCEANOGRAPHIC variables to acoustics data (grid)!!
 
-# Join ALL OCEANOGRAPHIC variables to acoustics data grid!!
-
-# NOW JOIN ALL OF OUR RE-GRIDDED CTD DATA TOGETHER WITH ACOUSTIC DATA!! 
 CTD data from 150m, 500m and center of mass (CM) 314m depth
 
 Would like to join this CTD data to existing regrided acoustics data (acoustics_regrid)
@@ -1012,695 +961,10 @@ rm(ctd_chl_100m, ctd_den_150m, ctd_den_500m, ctd_den_cm, ctd_dyn_ht_500m, ctd_o2
 ```
 
 
-Going to skip ahead to satellite derived light data and return to this soon....
+# NEXT
+move to satellite.Rmd to add satellite derived light data to our df of oceanic and acoustic data acoustics_ctd
 
 
-
-
-
-# INTERPOLATED OCEANOGRAPHIC VARIABLES-- indirect variables
-
-The following code calculates 
-- depth at which oxygen reaches 0.5 ml/l
-- spice at 26.0 isopycnal 
-
-I am NOT planning to add these values to our acoustics_ctd df as input to the gam because they are more derived variables and not a direct value measurement. They thus represent more of the indirect mechanisms that impact prevailing ocean conditions (spice). I might add depth at which oxygen reaches 0.5 ml/l however, and just see if it is correlated. 
-
-
-# Assign a cell # to each of our CTD casts based on lat long position
-Since the following variales will be derived so that there is one record per CTD as opposed to what we have done above, where we were still extracting values from a full vertical CTD cast, the followin must be run prior to calculating variable so that we have a cell_number to group by! 
-NOTE: I know i know, this is ugly code, but it works! 
-```{r}
-# select for unique cell values
-
-grid= acoustics_regrid |> 
-      distinct(cell, lon_grid_low, lon_grid_hi, lat_grid_low, lat_grid_hi)
-  
-grid
-
-# now would like to assign these values for individual CTD casts
-
-ctd_deep_data_core=ctd_deep_data_core |> 
-  mutate(cell_no= case_when(
-                    LONGITUDE >= grid[1, "lon_grid_low"] & LONGITUDE <= grid[1, "lon_grid_hi"] & LATITUDE>=grid[1, "lat_grid_low"] & LATITUDE <=grid[1, "lat_grid_hi"] ~ "1",
-                    LONGITUDE >= grid[2, "lon_grid_low"] & LONGITUDE <= grid[2, "lon_grid_hi"] & LATITUDE>=grid[2, "lat_grid_low"] & LATITUDE <=grid[2, "lat_grid_hi"] ~ "2",
-                    LONGITUDE >= grid[3, "lon_grid_low"] & LONGITUDE <= grid[3, "lon_grid_hi"] & LATITUDE>=grid[3, "lat_grid_low"] & LATITUDE <=grid[3, "lat_grid_hi"] ~ "3",
-                    LONGITUDE >= grid[4, "lon_grid_low"] & LONGITUDE <= grid[4, "lon_grid_hi"] & LATITUDE>=grid[4, "lat_grid_low"] & LATITUDE <=grid[4, "lat_grid_hi"] ~ "4",
-                    LONGITUDE >= grid[5, "lon_grid_low"] & LONGITUDE <= grid[5, "lon_grid_hi"] & LATITUDE>=grid[5, "lat_grid_low"] & LATITUDE <=grid[5, "lat_grid_hi"] ~ "5",
-                    LONGITUDE >= grid[6, "lon_grid_low"] & LONGITUDE <= grid[6, "lon_grid_hi"] & LATITUDE>=grid[6, "lat_grid_low"] & LATITUDE <=grid[6, "lat_grid_hi"] ~ "6",
-                    LONGITUDE >= grid[7, "lon_grid_low"] & LONGITUDE <= grid[7, "lon_grid_hi"] & LATITUDE>=grid[7, "lat_grid_low"] & LATITUDE <=grid[7, "lat_grid_hi"] ~ "7",
-                    LONGITUDE >= grid[8, "lon_grid_low"] & LONGITUDE <= grid[8, "lon_grid_hi"] & LATITUDE>=grid[8, "lat_grid_low"] & LATITUDE <=grid[8, "lat_grid_hi"] ~ "8",
-                    LONGITUDE >= grid[9, "lon_grid_low"] & LONGITUDE <= grid[9, "lon_grid_hi"] & LATITUDE>=grid[9, "lat_grid_low"] & LATITUDE <=grid[9, "lat_grid_hi"] ~ "9",
-                    LONGITUDE >= grid[10, "lon_grid_low"] & LONGITUDE <= grid[10, "lon_grid_hi"] & LATITUDE>=grid[10, "lat_grid_low"] & LATITUDE <=grid[10, "lat_grid_hi"] ~ "10",
-                    LONGITUDE >= grid[11, "lon_grid_low"] & LONGITUDE <= grid[11, "lon_grid_hi"] & LATITUDE>=grid[11, "lat_grid_low"] & LATITUDE <=grid[11, "lat_grid_hi"] ~ "11",
-                    LONGITUDE >= grid[12, "lon_grid_low"] & LONGITUDE <= grid[12, "lon_grid_hi"] & LATITUDE>=grid[12, "lat_grid_low"] & LATITUDE <=grid[12, "lat_grid_hi"] ~ "12",
-                    LONGITUDE >= grid[13, "lon_grid_low"] & LONGITUDE <= grid[13, "lon_grid_hi"] & LATITUDE>=grid[13, "lat_grid_low"] & LATITUDE <=grid[13, "lat_grid_hi"] ~ "13",
-                    LONGITUDE >= grid[14, "lon_grid_low"] & LONGITUDE <= grid[14, "lon_grid_hi"] & LATITUDE>=grid[14, "lat_grid_low"] & LATITUDE <=grid[14, "lat_grid_hi"] ~ "14",
-                    LONGITUDE >= grid[15, "lon_grid_low"] & LONGITUDE <= grid[15, "lon_grid_hi"] & LATITUDE>=grid[15, "lat_grid_low"] & LATITUDE <=grid[15, "lat_grid_hi"] ~ "15",
-                    LONGITUDE >= grid[16, "lon_grid_low"] & LONGITUDE <= grid[16, "lon_grid_hi"] & LATITUDE>=grid[16, "lat_grid_low"] & LATITUDE <=grid[16, "lat_grid_hi"] ~ "16",
-                    LONGITUDE >= grid[17, "lon_grid_low"] & LONGITUDE <= grid[17, "lon_grid_hi"] & LATITUDE>=grid[17, "lat_grid_low"] & LATITUDE <=grid[17, "lat_grid_hi"] ~ "17",
-                    LONGITUDE >= grid[18, "lon_grid_low"] & LONGITUDE <= grid[18, "lon_grid_hi"] & LATITUDE>=grid[18, "lat_grid_low"] & LATITUDE <=grid[18, "lat_grid_hi"] ~ "18",
-                    LONGITUDE >= grid[19, "lon_grid_low"] & LONGITUDE <= grid[19, "lon_grid_hi"] & LATITUDE>=grid[19, "lat_grid_low"] & LATITUDE <=grid[19, "lat_grid_hi"] ~ "19",
-                    LONGITUDE >= grid[20, "lon_grid_low"] & LONGITUDE <= grid[20, "lon_grid_hi"] & LATITUDE>=grid[20, "lat_grid_low"] & LATITUDE <=grid[20, "lat_grid_hi"] ~ "20",
-                    LONGITUDE >= grid[21, "lon_grid_low"] & LONGITUDE <= grid[21, "lon_grid_hi"] & LATITUDE>=grid[21, "lat_grid_low"] & LATITUDE <=grid[21, "lat_grid_hi"] ~ "21",
-                    LONGITUDE >= grid[22, "lon_grid_low"] & LONGITUDE <= grid[22, "lon_grid_hi"] & LATITUDE>=grid[22, "lat_grid_low"] & LATITUDE <=grid[22, "lat_grid_hi"] ~ "22",
-                    LONGITUDE >= grid[23, "lon_grid_low"] & LONGITUDE <= grid[23, "lon_grid_hi"] & LATITUDE>=grid[23, "lat_grid_low"] & LATITUDE <=grid[23, "lat_grid_hi"] ~ "23",
-                    LONGITUDE >= grid[24, "lon_grid_low"] & LONGITUDE <= grid[24, "lon_grid_hi"] & LATITUDE>=grid[24, "lat_grid_low"] & LATITUDE <=grid[24, "lat_grid_hi"] ~ "24",
-                    LONGITUDE >= grid[25, "lon_grid_low"] & LONGITUDE <= grid[25, "lon_grid_hi"] & LATITUDE>=grid[25, "lat_grid_low"] & LATITUDE <=grid[25, "lat_grid_hi"] ~ "25",
-                    LONGITUDE >= grid[26, "lon_grid_low"] & LONGITUDE <= grid[26, "lon_grid_hi"] & LATITUDE>=grid[26, "lat_grid_low"] & LATITUDE <=grid[26, "lat_grid_hi"] ~ "26",
-                    LONGITUDE >= grid[27, "lon_grid_low"] & LONGITUDE <= grid[27, "lon_grid_hi"] & LATITUDE>=grid[27, "lat_grid_low"] & LATITUDE <=grid[27, "lat_grid_hi"] ~ "27",
-                    LONGITUDE >= grid[28, "lon_grid_low"] & LONGITUDE <= grid[28, "lon_grid_hi"] & LATITUDE>=grid[28, "lat_grid_low"] & LATITUDE <=grid[28, "lat_grid_hi"] ~ "28",
-                    LONGITUDE >= grid[29, "lon_grid_low"] & LONGITUDE <= grid[29, "lon_grid_hi"] & LATITUDE>=grid[29, "lat_grid_low"] & LATITUDE <=grid[29, "lat_grid_hi"] ~ "29"))
-
-# We added a new column named cell_no that has the specific cell number corresponding to our gridded 25km output acoustics_regrid!
-
-```
-
-# Clean up cell naming- add a column to ctd data for cell_no to match up with re-gridded data cells (since not re-griding in the same was as other variables)
-```{r}
-# convert cell number col from character to numeric (for later plotting)- have to unlist 
-ctd_deep_data_core$cell_no= as.numeric(unlist(ctd_deep_data_core[["cell_no"]]))
-
-#remove any CTD stations without cell into (only one)- as these occur outside our acoustic data area
-ctd_cells = ctd_deep_data_core |> 
-            filter(!is.na(cell_no))
-
-# look for instances where there is a CTD cell number, but no acoustics data present! (as this will break for loop)
-#unique per year 
-
-ctd_cell_no= ctd_cells |> 
-  group_by(Year, cell_no) |> 
-  summarise(.groups = "drop") |> 
-  arrange(Year, cell_no) |> 
-  rename(year=Year, cell=cell_no)
-
-# and see if this matches up with acoustics regrid data?
-acoustics_cell_no= acoustics_regrid |> 
-  group_by(year, cell) |> 
-  summarise(.groups = 'drop') |> 
-  arrange(year, cell)
- 
-# ensure year variable same class
-class(ctd_cell_no$year)
-acoustics_cell_no$year <- as.numeric(acoustics_cell_no$year)
-class(acoustics_cell_no$year)
-
- # check which are different- anti_join returns all rows from x (ctd_cell_no) WITHOUT a match in y (acoustics_cell_no)
-anti_join(ctd_cell_no, acoustics_cell_no, by=c("year", "cell"))
-
-# ONLY 5 CTD stations recorded within grid cell regions, that did not have accompanying acoustics data
-
-# remove those values from our input df (note: these are ctd stations that did not have associated acosutics data although they were within the boundary of our grid cells )
-
-ctd_cells= ctd_cells |> 
-  filter(!(Year==2015 & cell_no==23|
-           Year==2015 & cell_no==29|
-           Year==2017 & cell_no==4 |
-           Year==2018 & cell_no==15|
-           Year==2018 & cell_no==28))
-
-# DF as input for for loop ctd_cells
-# has now removed any (1) ctds outside our range (no cell #) and those ctd stations within range (cell #), but no associated acosutics data
-
-rm(ctd_cell_no, acoustics_cell_no)
-```
-
-# DERIVED VARIABLE: SPICE AT 26.0 ISOPYCNAL 
-
-Jerome suggested I extract spice values at the 26.0 isopycnal (even though this isn't strictly occurring at mesopelagic depths, it is a more established way to describe prevailing water mass during the survey)~ this is more like ~100m depth
-
-
-# Calculate spice at or nearest to 26.0 isopycnal
-Goal: select spice value where density exactly equals 26.0 or would at 26.0 using a linear interpolation
-
-```{r find nearest spice value }
-
-# if density equals 26.0 - exactly, return spice value
-  density_26= ctd_deep_data_core|> 
-  group_by(Year, CTD_INDEX, cell_no) |> # group by individual CTD cast and year, keep cell_no for reference (can have multiple casts per cell)
-  filter(DENSITY== 26.00) |> # if density equal to 26.0 isopycnal
-  filter(row_number()==1) |>  # select first row per each group- or the first time density reached 26 if more than once
-  reframe(density_at26=DENSITY, depth_at26=CTD_DEPTH, spice_at26_gibbs=Spice_gibbs, spice_at26_flament=Spice_flament)
-
-density_26
-
-   # closest density value (BELOW) 26.0
-  density_below_26= ctd_deep_data_core|> 
-  group_by(Year, CTD_INDEX, cell_no) |> # group by individual CTD cast and year, keep cell_no for reference (can have multiple casts per cell)
-  mutate(near=DENSITY-26.0) |> # density minus our value of 26.0
-  filter(near<0) |>  # select for values greaeter than 26.0
-  slice(which.max(near)) |>    # select for closest value to 26.0 and above
-  summarise(density_below=DENSITY, depth_below=CTD_DEPTH, spice_gibbs_below=Spice_gibbs, spice_flament_below=Spice_flament, .groups = "drop") 
-  
-  density_below_26
-
-   # closest density value (ABOVE) 26.0
-  density_above_26= ctd_deep_data_core|> 
-  group_by(Year, CTD_INDEX, cell_no) |> # group by individual CTD cast and year, keep cell_no for reference (can have multiple casts per cell)
-  mutate(near=DENSITY-26.0) |> # density minus our value of 26.0
-  filter(near>0) |>  # select for values greaeter than 26.0
-  slice(which.min(near)) |>    # select for closest value to 26.0 and above
-  summarise(density_above=DENSITY, depth_above=CTD_DEPTH, spice_gibbs_above=Spice_gibbs, spice_flament_above=Spice_flament, .groups = "drop") 
-  
-  density_above_26
-
-```
-
-# Estimate spice value at interpolated density value when equal to 26.0 
-
-```{r}
-
- # Join above and below
- cal_density_26= left_join(density_below_26, density_above_26, by=c("Year", "CTD_INDEX", "cell_no"))
-# join our above and below dfs together
-
-cal_density_26= cal_density_26 |> 
-  mutate(alpha=(26-density_below)/(density_above-density_below)) |> 
-  mutate(spice_26_gibbs=((1-alpha)*spice_gibbs_below)+ (alpha*spice_gibbs_above)) |> 
-  mutate(spice_26_flament=((1-alpha)*spice_flament_below)+ (alpha*spice_flament_above))
-```
-# Join those spice values where the density perfectly hit 26.0 and those that we had to infer from linear interpolation (above)
-
-```{r}
-# Join our values at exactly 26 with our calculated values
-spice_26= left_join(cal_density_26, density_26, by=c("Year", "CTD_INDEX", "cell_no"))
-
-# select for value at 26, and if not present use calculated value
-spice_26= spice_26 |> 
-mutate(SPICE_26_gibbs= if_else(is.na(spice_at26_gibbs), spice_26_gibbs, spice_at26_gibbs)) |> 
-mutate(SPICE_26_flament= if_else(is.na(spice_at26_flament), spice_26_flament, spice_at26_flament)) |> 
-select(Year, CTD_INDEX, cell_no, SPICE_26_gibbs, SPICE_26_flament)
-# note capitalized SPICE to differentiate from previous versions
-
-rm(cal_density_26, density_below_26, density_above_26) #rm intermediary dfs
-```
-
-
-
-# DERIVED VARIABLE: DEPTH OF 26.0 ISOPYCNAL 
-
-Jerome suggested I extract spice values at the 26.0 isopycnal (even though this isn't strictly occurring at mesopelagic depths, it is a more established way to describe prevailing water mass during the survey)~ this is more like ~100m depth
-
-
-# Calculate depth at or nearest to 26.0 isopycnal
-Goal: select depth value where density exactly equals 26.0 or would at 26.0 using a linear interpolation
-
-```{r find nearest 260 depth value }
-
-# if density equals 26.0 - exactly, return depth value
-  depth_26= ctd_deep_data_core|> 
-  group_by(Year, CTD_INDEX, cell_no) |> # group by individual CTD cast and year, keep cell_no for reference (can have multiple casts per cell)
-  filter(DENSITY== 26.00) |> # if density equal to 26.0 isopycnal
-  filter(row_number()==1) |>  # select first row per each group- or the first time isopycnal reached 26
-  reframe(density_at26=DENSITY, depth_at26=CTD_DEPTH)
-
-depth_26
-   # closest density value (BELOW) 26.0
-  depth_below_26= ctd_deep_data_core|> 
-  group_by(Year, CTD_INDEX, cell_no) |> # group by individual CTD cast and year, keep cell_no for reference (can have multiple casts per cell)
-  mutate(near=DENSITY-26.0) |> # density minus our value of 26.0
-  filter(near<0) |>  # select for values greaeter than 26.0
-  slice(which.max(near)) |>    # select for closest value to 26.0 and above
-  summarise(density_below=DENSITY, depth_below=CTD_DEPTH, .groups = "drop") 
-  
-depth_below_26
-
-   # closest density value (ABOVE) 26.0
-  depth_above_26= ctd_deep_data_core|> 
-  group_by(Year, CTD_INDEX, cell_no) |> # group by individual CTD cast and year, keep cell_no for reference (can have multiple casts per cell)
-  mutate(near=DENSITY-26.0) |> # density minus our value of 26.0
-  filter(near>0) |>  # select for values greaeter than 26.0
-  slice(which.min(near)) |>    # select for closest value to 26.0 and above
-  summarise(density_above=DENSITY, depth_above=CTD_DEPTH,.groups = "drop") 
-  
-depth_above_26
-
-```
-# Estimate depth value at interpolated density value when equal to 26.0 
-
-```{r}
-
- # Join above and below
- cal_depth_26= left_join(depth_below_26, depth_above_26, by=c("Year", "CTD_INDEX", "cell_no"))
-# join our above and below dfs together
-
-cal_depth_26= cal_depth_26 |> 
-  mutate(alpha=(26-density_below)/(density_above-density_below)) |> 
-  mutate(depth_26_interpolate=((1-alpha)*depth_below)+ (alpha*depth_above)) 
-
-```
-# Join those depth values where the density perfectly hit 26.0 and those that we had to infer from linear interpolation (above)
-
-```{r}
-# Join our values at exactly 26 with our calculated values
-depth_26= left_join(cal_depth_26, depth_26, by=c("Year", "CTD_INDEX", "cell_no"))
-# ensure classes the same
-
-
-# select for value at 26, and if not present use calculated value
-depth_26= depth_26 |> 
-mutate(DEPTH_26= if_else(is.na(depth_at26), depth_26_interpolate, depth_at26)) |> # if no value AT 26 density exactly, use interpolated data
-select(Year, CTD_INDEX, cell_no, DEPTH_26)
-# note capitalized SPICE to differentiate from previous versions
-
-rm(cal_depth_26, depth_below_26, depth_above_26)# remove intermediary dfs
-```
-
-
-# # DERIVED VARIABLE: DEPTH of OXYGEN at 0.5 ml/l ##########################################
-
-# Extract depth value when oxygen perfectly equals 0.5 ml/l or closest value above or below
-Goal: select depth value where oxygen exactly equals 0.5mll or would if we use a linear interpolation
-
-SIDEBAR: i couldn't remember slice_head() when I was writing this, but insted of filter(row_number==1), i could have used slice_head() to get the same result (the first row per group or first record where meets criteria)
-```{r find nearest oxygen depth value }
-
-# if density equals 26.0 - exactly, return depth value
-  oxygen_05= ctd_deep_data_core|> 
-  group_by(Year, CTD_INDEX, cell_no) |> # group by individual CTD cast and year, keep cell_no for reference (can have multiple casts per cell)
-  filter(OXYGEN== 0.5) |> # if oxygen exactly equal to 0.5 ml/l
-  filter(row_number()==1) |>  # select first row per each group- or the first time oxygen reached 0.5ml/l
-  reframe(depth_at05=CTD_DEPTH, oxygen=OXYGEN)
-
-oxygen_05
-   
-# closest density value (BELOW) 26.0
-  oxygen_below_05= ctd_deep_data_core|> 
-  group_by(Year, CTD_INDEX, cell_no) |> # group by individual CTD cast and year, keep cell_no for reference (can have multiple casts per cell)
-  mutate(near=OXYGEN-0.5) |> # density minus our value of 26.0
-  filter(near<0) |>  # select for values greaeter than 26.0
-  slice(which.max(near)) |>    # select for closest value to 26.0 and above
-  summarise(oxygen_below=OXYGEN, depth_below=CTD_DEPTH, .groups = "drop") 
-  
-oxygen_below_05
-
-   # closest density value (ABOVE) 26.0
-  oxygen_above_05= ctd_deep_data_core|> 
-  group_by(Year, CTD_INDEX, cell_no) |> # group by individual CTD cast and year, keep cell_no for reference (can have multiple casts per cell)
-  mutate(near=OXYGEN-0.5) |> # density minus our value of 26.0
-  filter(near>0) |>  # select for values greaeter than 26.0
-  slice(which.min(near)) |>    # select for closest value to 26.0 and above
-  summarise(oxygen_above=OXYGEN, depth_above=CTD_DEPTH,.groups = "drop") 
-  
-oxygen_above_05
-
-```
-# Estimate depth value at interpolated density value when equal to 26.0 
-
-```{r}
-
- # Join above and below
- cal_oxygen_05= left_join(oxygen_below_05, oxygen_above_05, by=c("Year", "CTD_INDEX", "cell_no"))
-# join our above and below dfs together
-
-cal_oxygen_05= cal_oxygen_05 |> 
-  mutate(alpha=(0.5-oxygen_below)/(oxygen_above-oxygen_below)) |> # calculate distance from 0.5 ml/l
-  mutate(depth_o2_interpolate=((1-alpha)*depth_below)+ (alpha*depth_above)) 
-
-```
-# Join those depth values where the density perfectly hit 26.0 and those that we had to infer from linear interpolation (above)
-
-```{r}
-# Join our values at exactly 26 with our calculated values
-oxygen_05= left_join(cal_oxygen_05, oxygen_05, by=c("Year", "CTD_INDEX", "cell_no"))
-# ensure classes the same
-
-
-# select for value at 26, and if not present use calculated value
-oxygen_05= oxygen_05 |> 
-mutate(DEPTH_o2_05= if_else(is.na(depth_at05), depth_o2_interpolate, depth_at05)) |> # if no value AT 26 density exactly, use interpolated data
-select(Year, CTD_INDEX, cell_no, DEPTH_o2_05) |> 
-mutate(DEPTH_o2_05= round(DEPTH_o2_05, 0))# round to the nearest meter 
-       
-# mean depth at which oxygen reached 0.5 mll
-mean(oxygen_05$DEPTH_o2_05) # 443.5 meters!
-range(oxygen_05$DEPTH_o2_05) #370 --506 m
-
-oxygen_05 |> 
-  group_by(Year) |> 
-  summarise(mean_o2_depth=mean(DEPTH_o2_05), .groups = 'drop') #perplexing! 
-
-rm(cal_oxygen_05, oxygen_below_05, oxygen_above_05)# remove intermediary dfs
-```
-
-
-# REGRID each of our derived variables (depth of 26.0 isopycnal, spice at 26.0 isopycnal, depth where oxygen reaches 0.5 mll)
-
-The following calculates the mean value of each oceanographic variable per 25km by 25km acoustic grid cell 
-
-Note that while we used the raster::rasterize function for all values until now, our derived variables are unique in that we have ONE value per cast (as opposed to a full cast that we were extracting values from at a given depth). As such, we need to ensure that we have a cell_no column available for the CTD data. This is available in the code above, originally developed for extracting CTD data at center of mass depth unique to each cell. Our raster::rasterize code also doesn't work here because we created a different dataframe for each variable spice_26, depth_26 and oxygen_05 (instead of our profile info from ctd_deep_date_core)
-
-
-NOTE: here is code to do this for spice and depth at 26.0 isopycnal. I am not adding this to the regridded data because we are not including them in our GAM model. They are hopefully going to be a helpful additonal analysis to describe potential mechanisms instead. But leaving this here for reference. Most likely I would just like to plot these! 
-
-# Calculate mean spice per 25km cell
-spice_26_cell= spice_26 |> 
-                group_by(Year, cell_no) |> # for each cell in a given year
-                summarise(SPICE_gibbs=mean(SPICE_26_gibbs), SPICE_flament=mean(SPICE_26_flament),.groups='drop') |> 
-                rename(year=Year, cell=cell_no)
-#rm(spice_26)
-
-#quality check-- no missing values?
-spice_26_cell |> 
-filter(is.na(SPICE_gibbs)) # no missing records, but need to ensure we remove records missing cell number?!! 
-
-# remove records missing cell value (outside survey area)
-spice_26_cell |> 
-filter(is.na(cell))
-
-```{r regrid to acosutic 25km grid cells}
-
-# Calculate mean spice per 25km cell
-oxygen_05_cell= oxygen_05 |> 
-                group_by(Year, cell_no) |> # for each cell in a given year
-                summarise(DEPTH_o2_05=mean(DEPTH_o2_05),.groups='drop') |> 
-                rename(year=Year, cell=cell_no)
-
-#quality check-- no missing values?
-oxygen_05_cell |> 
-filter(is.na(DEPTH_o2_05)) # no missing records, but need to ensure we remove records missing cell number?!! 
-
-# remove records missing cell value (outside survey area)
-oxygen_05_cell= oxygen_05_cell |> 
-                filter(!is.na(cell))
-
-```
-
-
-# JOIN our derived variables -- Depth of oxygen at 0.5 ml/l
-We also have calculated spice along the 26.0 isopycnal as well as depth of the 26.0 isopycnal, but I am planning to use these to explain interannual differences and point to some mechansims for the observed, directy measured values from the CTD 
-
-```{r}
-acoustics_ctd= left_join(acoustics_ctd, dplyr::select(oxygen_05_cell, year, cell, DEPTH_o2_05), by=c("year", "cell")) #temp at cm 314
-rm(oxygen_05_cell)
-```
-
-A total of 135 grid cells. This hasn't selected for only those cells with available CTD data- ie there were some acoustics cells that didn't have associated CTD data which we will regrettably have to remove
-
-# Remove those acoustic cells that are missing CTD information
-NOTE there are two additional cells missing data on the depth at which oxygen reaches 0.5 mll (this is probably just because the cast didn't reach an oxygen concentration lower than 0.5mll not because of calculation or instrument error)
-```{r remove cells without ctd data }
-
-acoustics_ctd= acoustics_ctd |> 
-  filter(!(is.na(temp_150m))) |>  #remove those acoustics cells without associated CTD data
-  filter(!(year==2017 & cell==17)) # remove additional cell missing MOST but not all CTD data
-
-
-# after this there was only one cell that had quite a few missing values (no temp, salinity, oxygen at 150m ) which I additionally removed
-```
-
-Going to leave values here, but if I include in gam i think I have to have a value for every cell, so would have to remove an additional 2 cells (bringing the grand total to 89 cells)
-
-These will be used in our GAM! 
-
-# For plotting, see ploting oceano.Rmd
-# for GAM see analysis 2 
-
-
-
-
-
-
-
-
-# NOTE: in case i later wish to add depth, I added this information from {marmap} available in read clean.Rmd for refernce. If I later need to regrid, this would be the section , similar to the derived variables above!
-
-
-
-
-
-
-# BELOW HERE JUST FOR REFRENCE 
-# Oceanographic variables at center of mass depth (CM)
-II UPDATE: the following, beautiful if I must say so myself, code was created for extracting ctd variables at the unique center of mass depth per cell. Since I am now only going to be extracting values for the MEAN CM depth of 314 m, I don't need all of this code but am definitely keeping it for two reasons: 1. I still need to assign cell numbers to each cell and 2. it was a lot of work and If i have to later do this i don't want to start over again! Go team! 
-
-
-At a 25km resolution, interested in mean values of CTD variables at center of mass depth- 
-Note that the center of mass depth changes for each individual grid cell
-
-
-# Visualize acoustic grid (25km by 25km) with CTD casts overlaid
-
-# RENAME 
-Year to year to match with existing grid - ctd_deep_loc_core df for plotting
-```{r}
-# create a df with just one value per CTD cast (as opposed to whole vertical ccast)- slice_head returns first row per group 208 casts
-ctd_deep_loc_core= ctd_deep_data_core |> 
-                   group_by(Year, CTD_INDEX) |> 
-                   slice_head() |> 
-                   rename(year=Year)
-
-# plot CTD position over grid cells
-ggplot(data=acoustics_regrid)+
-  geom_text(aes(x=lon, y=lat, label=cell), size=2.1)+ 
-  scale_fill_viridis_c(option="magma", direction=1 )+ #color palette and direction
-  geom_text(aes(x=lon, y=lat, label=cell), size=2.1)+
-  geom_sf(data=states)+ #add basemap not good one
-  coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39 ))+ #this is based on extent(r) raster but not UTM projection?
-  scale_x_continuous(breaks = round(acoustics_regrid$lon_grid_low, 2), minor_breaks = NULL)+
-  scale_y_continuous(breaks= round(acoustics_regrid$lat_grid_hi, 2), minor_breaks = NULL)+
-  geom_point(data=ctd_deep_loc_core, aes(x=LONGITUDE, y=LATITUDE), shape=3, size=0.5, color="chocolate")+
-  #geom_label(data=ctd_deep_loc_core, aes(x=LONGITUDE, y=LATITUDE, label=cell_no), size=1)+
-  xlab("")+
-  ylab("")+
-  labs(fill= "Temperature at 500 m")+ 
-  theme(axis.text.x = element_text(angle = 90),
-        panel.grid = element_line(color="black"),
-        panel.background = element_blank())+
-  facet_wrap(~year)
-
-ggsave("./plots/ctd/ctd_cells.jpg")
-
-```
-
-
-# Plot position of CTD casts over acoustics grid  
-FOR REF, need to run cell number code first! 
-```{r}
-# plot CTD position 
-
-ggplot()+
-  geom_text(data=acoustics_regrid, aes(x=lon, y=lat, label=cell), size=2.1, color="black")+ 
-  geom_sf(data=states)+ #add basemap not good one
-  coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39))+ #this is based on extent(r) raster but not UTM projection
-  scale_x_continuous(breaks = round(acoustics_regrid$lon_grid_low,2), minor_breaks = NULL)+
-  scale_y_continuous(breaks= round(acoustics_regrid$lat_grid_hi,2), minor_breaks = NULL)+
-  geom_text(data=ctd_deep_loc_core, aes(x=LONGITUDE, y=LATITUDE, label=cell_no), size=2, color="blue")+
-  xlab("")+
-  ylab("")+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank(),
-        panel.grid = element_line(color="black"),
-        panel.background = element_blank())+
-  facet_wrap(~year)
-
-ggsave("./plots/ctd_cells_label.jpg")
-```
-
-Okay, so we have a total of 
-
-length(unique(acoustics_regrid$cell)) # 29 grid cells 
-
-For each cell, I want to determine the center of mass depth (column cm_m) and then for each CTD variable, extract the oceanographic variable at that given depth 
-
-I will then need to assign a "cell number" for the CTD data based on the lat lon coordinates, then calculate the representative variable at specified depth?!
-
-
-# Assign a cell # to each of our CTD casts based on lat long position
-NOTE: I know i know, this is ugly code, but it works! 
-```{r}
-# select for unique cell values
-
-grid= acoustics_regrid |> 
-      distinct(cell, lon_grid_low, lon_grid_hi, lat_grid_low, lat_grid_hi)
-  
-grid
-
-# now would like to assign these values for individual CTD casts
-
-ctd_deep_data_core=ctd_deep_data_core |> 
-  mutate(cell_no= case_when(
-                    LONGITUDE >= grid[1, "lon_grid_low"] & LONGITUDE <= grid[1, "lon_grid_hi"] & LATITUDE>=grid[1, "lat_grid_low"] & LATITUDE <=grid[1, "lat_grid_hi"] ~ "1",
-                    LONGITUDE >= grid[2, "lon_grid_low"] & LONGITUDE <= grid[2, "lon_grid_hi"] & LATITUDE>=grid[2, "lat_grid_low"] & LATITUDE <=grid[2, "lat_grid_hi"] ~ "2",
-                    LONGITUDE >= grid[3, "lon_grid_low"] & LONGITUDE <= grid[3, "lon_grid_hi"] & LATITUDE>=grid[3, "lat_grid_low"] & LATITUDE <=grid[3, "lat_grid_hi"] ~ "3",
-                    LONGITUDE >= grid[4, "lon_grid_low"] & LONGITUDE <= grid[4, "lon_grid_hi"] & LATITUDE>=grid[4, "lat_grid_low"] & LATITUDE <=grid[4, "lat_grid_hi"] ~ "4",
-                    LONGITUDE >= grid[5, "lon_grid_low"] & LONGITUDE <= grid[5, "lon_grid_hi"] & LATITUDE>=grid[5, "lat_grid_low"] & LATITUDE <=grid[5, "lat_grid_hi"] ~ "5",
-                    LONGITUDE >= grid[6, "lon_grid_low"] & LONGITUDE <= grid[6, "lon_grid_hi"] & LATITUDE>=grid[6, "lat_grid_low"] & LATITUDE <=grid[6, "lat_grid_hi"] ~ "6",
-                    LONGITUDE >= grid[7, "lon_grid_low"] & LONGITUDE <= grid[7, "lon_grid_hi"] & LATITUDE>=grid[7, "lat_grid_low"] & LATITUDE <=grid[7, "lat_grid_hi"] ~ "7",
-                    LONGITUDE >= grid[8, "lon_grid_low"] & LONGITUDE <= grid[8, "lon_grid_hi"] & LATITUDE>=grid[8, "lat_grid_low"] & LATITUDE <=grid[8, "lat_grid_hi"] ~ "8",
-                    LONGITUDE >= grid[9, "lon_grid_low"] & LONGITUDE <= grid[9, "lon_grid_hi"] & LATITUDE>=grid[9, "lat_grid_low"] & LATITUDE <=grid[9, "lat_grid_hi"] ~ "9",
-                    LONGITUDE >= grid[10, "lon_grid_low"] & LONGITUDE <= grid[10, "lon_grid_hi"] & LATITUDE>=grid[10, "lat_grid_low"] & LATITUDE <=grid[10, "lat_grid_hi"] ~ "10",
-                    LONGITUDE >= grid[11, "lon_grid_low"] & LONGITUDE <= grid[11, "lon_grid_hi"] & LATITUDE>=grid[11, "lat_grid_low"] & LATITUDE <=grid[11, "lat_grid_hi"] ~ "11",
-                    LONGITUDE >= grid[12, "lon_grid_low"] & LONGITUDE <= grid[12, "lon_grid_hi"] & LATITUDE>=grid[12, "lat_grid_low"] & LATITUDE <=grid[12, "lat_grid_hi"] ~ "12",
-                    LONGITUDE >= grid[13, "lon_grid_low"] & LONGITUDE <= grid[13, "lon_grid_hi"] & LATITUDE>=grid[13, "lat_grid_low"] & LATITUDE <=grid[13, "lat_grid_hi"] ~ "13",
-                    LONGITUDE >= grid[14, "lon_grid_low"] & LONGITUDE <= grid[14, "lon_grid_hi"] & LATITUDE>=grid[14, "lat_grid_low"] & LATITUDE <=grid[14, "lat_grid_hi"] ~ "14",
-                    LONGITUDE >= grid[15, "lon_grid_low"] & LONGITUDE <= grid[15, "lon_grid_hi"] & LATITUDE>=grid[15, "lat_grid_low"] & LATITUDE <=grid[15, "lat_grid_hi"] ~ "15",
-                    LONGITUDE >= grid[16, "lon_grid_low"] & LONGITUDE <= grid[16, "lon_grid_hi"] & LATITUDE>=grid[16, "lat_grid_low"] & LATITUDE <=grid[16, "lat_grid_hi"] ~ "16",
-                    LONGITUDE >= grid[17, "lon_grid_low"] & LONGITUDE <= grid[17, "lon_grid_hi"] & LATITUDE>=grid[17, "lat_grid_low"] & LATITUDE <=grid[17, "lat_grid_hi"] ~ "17",
-                    LONGITUDE >= grid[18, "lon_grid_low"] & LONGITUDE <= grid[18, "lon_grid_hi"] & LATITUDE>=grid[18, "lat_grid_low"] & LATITUDE <=grid[18, "lat_grid_hi"] ~ "18",
-                    LONGITUDE >= grid[19, "lon_grid_low"] & LONGITUDE <= grid[19, "lon_grid_hi"] & LATITUDE>=grid[19, "lat_grid_low"] & LATITUDE <=grid[19, "lat_grid_hi"] ~ "19",
-                    LONGITUDE >= grid[20, "lon_grid_low"] & LONGITUDE <= grid[20, "lon_grid_hi"] & LATITUDE>=grid[20, "lat_grid_low"] & LATITUDE <=grid[20, "lat_grid_hi"] ~ "20",
-                    LONGITUDE >= grid[21, "lon_grid_low"] & LONGITUDE <= grid[21, "lon_grid_hi"] & LATITUDE>=grid[21, "lat_grid_low"] & LATITUDE <=grid[21, "lat_grid_hi"] ~ "21",
-                    LONGITUDE >= grid[22, "lon_grid_low"] & LONGITUDE <= grid[22, "lon_grid_hi"] & LATITUDE>=grid[22, "lat_grid_low"] & LATITUDE <=grid[22, "lat_grid_hi"] ~ "22",
-                    LONGITUDE >= grid[23, "lon_grid_low"] & LONGITUDE <= grid[23, "lon_grid_hi"] & LATITUDE>=grid[23, "lat_grid_low"] & LATITUDE <=grid[23, "lat_grid_hi"] ~ "23",
-                    LONGITUDE >= grid[24, "lon_grid_low"] & LONGITUDE <= grid[24, "lon_grid_hi"] & LATITUDE>=grid[24, "lat_grid_low"] & LATITUDE <=grid[24, "lat_grid_hi"] ~ "24",
-                    LONGITUDE >= grid[25, "lon_grid_low"] & LONGITUDE <= grid[25, "lon_grid_hi"] & LATITUDE>=grid[25, "lat_grid_low"] & LATITUDE <=grid[25, "lat_grid_hi"] ~ "25",
-                    LONGITUDE >= grid[26, "lon_grid_low"] & LONGITUDE <= grid[26, "lon_grid_hi"] & LATITUDE>=grid[26, "lat_grid_low"] & LATITUDE <=grid[26, "lat_grid_hi"] ~ "26",
-                    LONGITUDE >= grid[27, "lon_grid_low"] & LONGITUDE <= grid[27, "lon_grid_hi"] & LATITUDE>=grid[27, "lat_grid_low"] & LATITUDE <=grid[27, "lat_grid_hi"] ~ "27",
-                    LONGITUDE >= grid[28, "lon_grid_low"] & LONGITUDE <= grid[28, "lon_grid_hi"] & LATITUDE>=grid[28, "lat_grid_low"] & LATITUDE <=grid[28, "lat_grid_hi"] ~ "28",
-                    LONGITUDE >= grid[29, "lon_grid_low"] & LONGITUDE <= grid[29, "lon_grid_hi"] & LATITUDE>=grid[29, "lat_grid_low"] & LATITUDE <=grid[29, "lat_grid_hi"] ~ "29"))
-
-# We added a new column named cell_no that has the specific cell number corresponding to our gridded 25km output acoustics_regrid!
-
-```
-
-# Clean up cell naming
-```{r}
-# convert cell number col from character to numeric (for later plotting)- have to unlist 
-ctd_deep_data_core$cell_no= as.numeric(unlist(ctd_deep_data_core[["cell_no"]]))
-
-#remove any CTD stations without cell into (only one)- as these occur outside our acoustic data area
-ctd_cells = ctd_deep_data_core |> 
-            filter(!is.na(cell_no))
-
-# look for instances where there is a CTD cell number, but no acoustics data present! (as this will break for loop)
-#unique per year 
-
-ctd_cell_no= ctd_cells |> 
-  group_by(Year, cell_no) |> 
-  summarise(.groups = "drop") |> 
-  arrange(Year, cell_no) |> 
-  rename(year=Year, cell=cell_no)
-
-# and see if this matches up with acoustics regrid data?
-acoustics_cell_no= acoustics_regrid |> 
-  group_by(year, cell) |> 
-  summarise(.groups = 'drop') |> 
-  arrange(year, cell)
- 
-# ensure year variable same class
-class(ctd_cell_no$year)
-acoustics_cell_no$year <- as.numeric(acoustics_cell_no$year)
-class(acoustics_cell_no$year)
-
- # check which are different- anti_join returns all rows from x (ctd_cell_no) WITHOUT a match in y (acoustics_cell_no)
-anti_join(ctd_cell_no, acoustics_cell_no, by=c("year", "cell"))
-
-# ONLY 5 CTD stations recorded within grid cell regions, that did not have accompanying acoustics data
-
-# remove those values from our input df (note: these are ctd stations that did not have associated acosutics data although they were within the boundary of our grid cells )
-
-ctd_cells= ctd_cells |> 
-  filter(!(Year==2015 & cell_no==23|
-           Year==2015 & cell_no==29|
-           Year==2017 & cell_no==4 |
-           Year==2018 & cell_no==15|
-           Year==2018 & cell_no==28))
-
-# DF as input for for loop ctd_cells
-# has now removed any (1) ctds outside our range (no cell #) and those ctd stations within range (cell #), but no associated acosutics data
-
-rm(ctd_cell_no, acoustics_cell_no)
-```
-
-I am SURE there is a more elegant way to code this, but the above works! Hard to define each cell individually without writing it out!!
-
-# EXTRACTING OCEANOGRAPHIC VARIABLES AT CM DEPTH (unique per cell)
-
-df: ctd_cells: this is our ctd data that captured data to at least 500m, from the core region, that has had bad data removed, chl smoother and now...has assigned cell numbers (column cell_no) and the one CTD cast without a cell # removed (CTD_INDEX 46)
-
-
-```{r loop to extract variables at CM depth per cell}
-
-# for each year
-yr= unique(ctd_cells$Year)
-
-#create empty dataframe to store output
-oceano_cm= data.frame()
-
-for(i in 1: length(unique(ctd_cells$Year))){
-    
-  #for a given year...
-  ctd_yr <- ctd_cells |> 
-             filter(Year==yr[i]) 
-  
-  
-  # and for each year, list the unique grid cell # within each year...
-  cell_yr= unique(ctd_yr$cell_no)
-  
-  for(j in 1:length(cell_yr)){ #for a specific cell number...
-    
-    
-    # find center of mass value for specific cell-- from acoustic regrid df-- one value per cell (year combo)
-    cm_yr= acoustics_regrid |> 
-      filter(year==yr[i]) # select for a given year in our acoustic grid output
-      
-    cm_cell= cm_yr[cm_yr$cell==cell_yr[j], "cm_m"] #then return the center of mass value for a given year and cell #
-    cm_cell= plyr::round_any(cm_cell, 2) #round value to nearest 2m (because our CTD data is only collected every 2m)
-    
-    
-    # extract oceano variable (from CTD data) at center of mass depth specific to year and per cell and take mean of oceano values
-    ctd_yr_cell <-  ctd_yr |> #already selected for a given year
-                   filter(cell_no==cell_yr[j]) |> # filter for specific cell number, note can have multiple ctd casts
-                   filter(CTD_DEPTH==cm_cell) |>  #for that cell number extract oceano variable values at center of mass depth for that cell
-                   group_by(cell_no) |>  #group by cell_no
-                   summarise(temp_cm=mean(TEMPERATURE, na.rm=TRUE), 
-                             sal_cm=mean(SALINITY, na.rm=TRUE), 
-                             den_cm=mean(DENSITY, na.rm=TRUE), 
-                             o2_cm=mean(OXYGEN, na.rm=TRUE)) |> 
-                    mutate(year=yr[i], cell=cell_yr[j])
-   
-    
-    # store output
-    oceano_cm <- rbind(oceano_cm, ctd_yr_cell)
-    
-  }
-}
-
-# remove intermediary files when done
-
-rm(ctd_yr_cell, cm_cell, cell_yr, ctd_yr, cm_yr)
-
-
-```
-
-Error checking: there were initially some errors which have been resolved (in step above and verified below i believe)
-
-ERROR reported in CTD_INDEX=34, Year=2015 (make sure this isn't a grouping issues as well!)
-# Just for reference
-ctd_cells |> 
-  filter(Year==2015) |> 
-  filter(CTD_INDEX==34)
-# cell number 23 in 2015 had CTD data and no acoustics data (although it fell within a cell boundary) returns an error
-
-acoustics_regrid |> 
-  filter(year==2015) |> 
-  filter(cell==23) #Don't seem to have a cell 23?! SO unfortunately no acoustics data for this CTD cell (although it fits into the specified grid value, must not have been data available in this given year....) # just need to figure out how to ignore in those cases when not available. Also make sure it doesn't round to nearest 2m!!! 
-
-
-
-
-
-
-# FOR PLOTTING of oceanographic variables, see Analysis 2 plots
-# FOR analysis of oceanographic data with acoustics, see Analysis 2 gam.Rmd
-
-
-# II QUICK TEST OF DYNAMIC HEIGHT
-
-```{r}
-ctd_deep_data_core |> 
-  dplyr::filter(CTD_DEPTH==500) |> 
-  dplyr::group_by(CRUISE, CTD_INDEX, DYN_HGT) |> 
-  dplyr::summarise()
-  
-# mean
-ctd_deep_data_core |> 
-  dplyr::filter(CTD_DEPTH==500) |> 
-  dplyr::group_by(CRUISE) |> 
-  dplyr::summarise(mean_dy_ht=mean(DYN_HGT))
-
-```
 
 
 
