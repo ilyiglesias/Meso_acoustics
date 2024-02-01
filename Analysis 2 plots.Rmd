@@ -373,7 +373,7 @@ ggplot(data=acoustics_ctd, aes(x=as.factor(year), y=Z, group=year, color=as.fact
   geom_boxplot( aes(group=year), outlier.shape=NA, show.legend = FALSE)+ #plot boxplots without outliers since in jitter
   scale_color_manual(values = c("2013"="black" , "2014"="black", "2015"="#D55E00" , "2016"= "#D55E00" , "2017"="black", "2018"="black"))+
   geom_jitter(alpha=0.3, color="#999999" , width=0.15)+
-  geom_text(data= summary_yrs, aes(x = year, y = median_Z, label = paste0("Median:", round(median_dyn_ht, 2))), size = 3, vjust = -0.5)+ #label
+  geom_text(data= summary_yrs, aes(x = year, y = median_Z, label = paste0("Median:", round(median_Z, 2))), size = 3, vjust = -0.5)+ #label
   scale_y_reverse()+ #deeper at bottom of plot easier for me to grasp
   xlab("Year")+
   ylab("Depth at which light ~1% of surface [m]")+
@@ -390,8 +390,8 @@ ggplot(data=acoustics_ctd, aes(x=as.factor(year), y=temp_cm, group=year, color=a
   geom_boxplot( aes(group=year), outlier.shape=NA, show.legend = FALSE)+ #plot boxplots without outliers since in jitter
   scale_color_manual(values = c("2013"="black" , "2014"="black", "2015"="#D55E00" , "2016"= "#D55E00" , "2017"="black", "2018"="black"))+
   geom_jitter(alpha=0.3, color="#999999" , width=0.15)+
-  geom_text(data= summary_yrs, aes(x = year, y = median_temp_cm, label = paste0("Median:", round(median_dyn_ht, 2))), size = 3, vjust = -0.5)+ #label
-  geom_text(data= summary_yrs, aes(x =year, y = median_temp_cm, label = paste0("n: ", n)), size = 2, vjust = 1.5, color="black")+ #label sample size 
+  geom_text(data= summary_yrs, aes(x = year, y = median_temp_cm, label = paste0("Median:", round(median_temp_cm, 2))), size = 3, vjust = -0.5)+ #label
+  #geom_text(data= summary_yrs, aes(x =year, y = median_temp_cm, label = paste0("n: ", n)), size = 2, vjust = 1.5, color="black")+ #label sample size 
   xlab("Year")+
   ylab("Temperature at 314 m [C]")+
   ggthemes::theme_few()+
@@ -409,7 +409,7 @@ ggplot(data=acoustics_ctd, aes(x=as.factor(year), y=MVBS, group=year, color=as.f
   geom_boxplot( aes(group=year), outlier.shape=NA, show.legend = FALSE)+ #plot boxplots without outliers since in jitter
   scale_color_manual(values = c("2013"="black" , "2014"="black", "2015"="#D55E00" , "2016"= "#D55E00" , "2017"="black", "2018"="black"))+
   geom_jitter(alpha=0.3, color="#999999" , width=0.15)+
-  geom_text(data= summary_yrs, aes(x = year, y = median_MVBS, label = paste0("Median:", round(median_dyn_ht, 2))), size = 3, vjust = -0.5)+ #label
+  geom_text(data= summary_yrs, aes(x = year, y = median_MVBS, label = paste0("Median:", round(median_MVBS, 2))), size = 3, vjust = -0.5)+ #label
   xlab("Year")+
   ylab("MVBS [dB]")+
   ggthemes::theme_few()+
@@ -425,7 +425,7 @@ ggplot(data=acoustics_ctd, aes(x=as.factor(year), y=chl_100m, group=year, color=
   geom_boxplot( aes(group=year), outlier.shape=NA, show.legend = FALSE)+ #plot boxplots without outliers since in jitter
   scale_color_manual(values = c("2013"="black" , "2014"="black", "2015"="#D55E00" , "2016"= "#D55E00" , "2017"="black", "2018"="black"))+
   geom_jitter(alpha=0.3, color="#999999" , width=0.15)+
-  geom_text(data= summary_yrs, aes(x = year, y = median_chl, label = paste0("Median:", round(median_dyn_ht, 2))), size = 3, vjust = -0.5)+ #label
+  geom_text(data= summary_yrs, aes(x = year, y = median_chl, label = paste0("Median:", round(median_chl, 2))), size = 3, vjust = -0.5)+ #label
   xlab("Year")+
   ylab("Chl in upper 100 m")+
   ggthemes::theme_few()+
@@ -443,7 +443,7 @@ ggplot(data=acoustics_ctd, aes(x=as.factor(year), y=o2_150m, group=year, color=a
   geom_boxplot( aes(group=year), outlier.shape=NA, show.legend = FALSE)+ #plot boxplots without outliers since in jitter
   scale_color_manual(values = c("2013"="black" , "2014"="black", "2015"="#D55E00" , "2016"= "#D55E00" , "2017"="black", "2018"="black"))+
   geom_jitter(alpha=0.3, color="#999999" , width=0.15)+
-  geom_text(data= summary_yrs, aes(x = year, y = median_o2_150m, label = paste0("Median:", round(median_dyn_ht, 2))), size = 3, vjust = -0.5)+ #label
+  geom_text(data= summary_yrs, aes(x = year, y = median_o2_150m, label = paste0("Median:", round(median_o2_150m, 2))), size = 3, vjust = -0.5)+ #label
   xlab("Year")+
   ylab("Oxygen at 150 m [ml/l]")+
   ggthemes::theme_few()+
