@@ -1,0 +1,394 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Objective of code:
+- checks for correlation amongst ocean variables (linear + nonlinear)
+- runs a GAM model with ocean covariates
+- evaluates model fit 
+
+88 total 25 by 25 km cells that have all oceanographic data and ocean covariates (df: acoustics_ctd)
+
+
+# Background:
+
+Interested in which oceanographic variables may be influencing center of mass depth (vertical position) of mesopelagic "fishes." Using a combination of CTD  and satellite (light) data, construct a generalized additive model (GAM) to determine whether the variables we included seem to have had an effect on center of mass depth.  
+
+
+# gratia
+install.packages("gratia",repos = c("https://gavinsimpson.r-universe.dev","https://cloud.r-project.org"))
+
+# load packages
+
+```{r load libraries}
+# update any installed R packages
+#update.packages(ask = TRUE, checkBuilt = TRUE)
+library(mgcv) # GAM function
+library(gratia) # gam plotting by Gavin Simpson (course instructor) - need to reload for most recent version
+library(tidyverse)
+
+```
+
+# Look at the distribution of our response variable: CM Center of Mass (m)
+
+```{r distribution of CM values}
+
+acoustics_ctd |> 
+  ggplot()+
+  geom_density(aes(x=cm_m))+
+  #geom_histogram(aes(x=CM), color="black", fill="white")+
+  #facet_wrap(~Year)+
+  theme_classic()
+  
+  # could also create a q-q plot 
+qqnorm(acoustics_ctd$cm_m)
+qqline(acoustics_ctd$cm_m)
+```
+# Evaluate correlation (linear) between covariates (ocean data)
+first step, check for correlation prior to modeling data with a GAM- this is simple linear correlation (evaluating collinearity), but we will also have to check for non-linear correlation via "concurvity" after fitting model.
+
+# Pairplot
+To evaluate linear correlation within our data, and be thoughtful (ie non-biased) in which variables to include
+
+# pairs plot via ggplot
+```{r pairs plot}
+
+ocean_corr= acoustics_ctd |> 
+  dplyr::select(MVBS, temp_150m, temp_500m, temp_cm, chl_100m, den_150m, den_500m, den_cm, dyn_ht_500m, o2_150m, o2_500m, o2_cm, Z) #note that DEPTH_o2_05 is missing data points so might be causing errors
+
+pairs(ocean_corr) # base R, hard ot read
+
+# Install package
+library(GGally)
+
+ggpairs(ocean_corr, upper = list(continuous=wrap("cor", size=2)))+
+  theme(strip.text.x = element_text(size = 5),
+           strip.text.y = element_text(size = 3),
+        axis.text = element_text(size=5)) #change label size
+
+ggsave("./plots/analysis 2/paris.pdf")
+```
+Remove those terms with correlation coefficients >0.7 based on Dormann
+
+This leaves:
+MVBS, temp_150m, temp_500m, chl_100m, dyn_ht_500m, o2_150m, o2_cm, o2_500m, Z
+
+# FULL MODEL-- fit a GAM -- prior to concurvity evaluation (concurvity describes non linear correlation)
+Fit our full model with all of the covariates that passed our colinear examination
+while noting that will will likely need to additionally remove covariates that are concurvity(ied)?
+```{r}
+colnames(acoustics_ctd)
+class(acoustics_ctd$dyn_ht_500m) #scientific notation appears to cause problems
+acoustics_ctd$dyn_ht_500m <- format(acoustics_ctd$dyn_ht_500m, scientific=FALSE)
+acoustics_ctd$dyn_ht_500m <- as.numeric(acoustics_ctd$dyn_ht_500m)
+acoustics_ctd$dyn_ht_500m <- round(acoustics_ctd$dyn_ht_500m, 4)
+
+# Full GAM model:
+m_full <- gam(cm_m ~ 
+                s(temp_150m) + #temp at 150m
+                s(temp_500m)+ #temp at 500m
+                s(o2_150m) +  # oxygen at 150m
+                s(o2_cm)+ # oxygen at 314m (mean cm depth)
+                s(o2_500m)+ #oxygen at 500m
+                s(chl_100m) + # integrated chl in upper 100m
+                s(dyn_ht_500m) + # dynamic height anomaly 
+                s(MVBS)+ #overall backscatter/biomass 
+                s(Z), #depth at which light is 1% of surface
+    data = acoustics_ctd, method = "REML", family = gaussian(), select = TRUE) #select=TRUE provides significance tests for each covariate
+
+summary.gam(m_full)
+#default value is k=10, check that this is an appropriate value with k.check
+```
+A note on covariate selection:
+
+Based on the pairs plot above, I removed variables that had a correlation coefficient of 0.7 or greater (although some were close to this). 
+Will now check all of these correlations with concurvity feature of GAM output 
+
+# View output of model
+format(2e-16,scientific=FALSE) # to see p-values in non scientific notation
+Customizing plots with gratia
+https://gavinsimpson.github.io/gratia/articles/custom-plotting.html
+```{r}
+# MODEL fit: amount explained, significant covariates
+summary(m_full)  # model summary 
+```
+# PLOT relationship between covariates and center of mass depth :: DRAW
+For reference: mgcv::plot.gam(m_full) #plot with mgcv package
+
+```{r}
+# PLOT: relationship of covariate to cm depth
+gratia::draw(m_full)& # plot with gratia
+ggthemes::theme_few() #note use of & in plot to apply theme options to all plots instead of just one 
+
+```
+# Plot with {mgcv}
+great documenation from NOAM ROSS online tutorial 
+```{r}
+plot(m_full, rug = TRUE, residuals = TRUE, se=TRUE, shade=TRUE, shade.col="cadetblue",
+     pch = 1, cex = 0.5) #this includes points for residuals 
+```
+
+# Examine model fit via {gratia}
+```{r}
+appraise(m_full, method = "simulate") # look at plot diagnostics
+
+# Our data appear to be approximately Gaussian, good fit except for at the extreme tails, overall a reasonable fit to our data
+```
+
+This model has a r-quared of 69% without including year or position (lat, lon)
+
+#  Further examine correlation (non-linear) amongst variables using the concurvity function on our output
+first have to rule out any additional correlation amongst covariates
+
+```{r}
+# overall concurvity
+concrvity(m_full, pairwise = FALSE) # if less than 0.8 all terms ok
+# if greater than 0.8, run pairwise comparisons
+
+conc <- concrvity(m_full, pairwise = TRUE)
+conc
+
+draw(conc)+
+  geom_text(aes(label=round(concurvity, 2)), size=2)+ #add actual values ot plot sweet none above 0.5
+  theme(axis.text.x = element_text(angle=90))
+
+```
+https://gavinsimpson.github.io/gratia/reference/model_concurvity.html
+https://stats.stackexchange.com/questions/580791/interpretation-of-estimate-concurvity-vs-worst-concurvity-in-gams for interpretation
+NOAM ROSS: https://noamross.github.io/gams-in-r-course/chapter2
+
+NROSS: "in general, we avoid putting multiple collinear variables into the same model" 
+"with GAMS we have an additional potential pitfall. Even if two variables aren't collinear, they may have concurvity, that is, one may be a smooth curve of another" If we use both variables as predictors in a model, we get smooths with wild confidence intervals
+
+Based on this advice, we then have to remove additional covariates:
+temperatuere at 150m, temperature at 500m, oxygen at 500m (correlated to Z)
+
+#More on concurvity 
+```{r}
+concurvity(m_full, full = TRUE) #overall - if any values high, run full=FALSE for pairwise comparisons 
+concur=concurvity(m_full, full = FALSE) # pairwise concurvities
+concur$worst #look at output for worst value 
+# convert format to non-scientific so I can evaluate actual values :)
+format(concur$worst, scientific = FALSE) #convert from scientific notation but harder to read look for values greater than 0.5 
+
+```
+NOAM ROSS: "since concurvity is complex, the function reports three different ways of measuring concurvity. Each is better in some situations. What is important is that you should always look at the worst case, and if the value is high (say, over 0.8), inspect your model more carefully"
+
+The following would be the final list: (this is also what Jerome recommendedish read emails): between oxygen and temperature, oxygen makes more sense because there is some evidence that bioligcally limiting
+
+o2_150m
+chl_100m
+dyn_ht_500m
+MVBS
+Z
+
+Note: because we no longer have a term for temperature, but previously selected co-linear temperature terms above, going to add term for temperature at 314 m (which was collinar to previous temperature terms, but not to this final list of terms (linear or concurvity).
+
+
+# FINAL MODEL GAM
+Redo the procedure from above but with set of non-correlated covariates (now all non correlated (check both colinarity and concurvity))
+ 
+```{r}
+
+# modified GAM model: use this one after convo with Jerome!!! 
+m_final <- mgcv::gam(cm_m ~ 
+                s(o2_150m) +  # oxygen at 150m depth
+                s(temp_cm)+
+                s(chl_100m) + # integrated chl
+                s(dyn_ht_500m) + # dynamic height anomaly 
+                s(MVBS)+ #overall backscatter/biomass 
+                s(Z), #depth at which light is 1% of surface note could also make this a linear term with Z instead of s(Z), same output 71.4%
+    data = acoustics_ctd, method = "REML", family = gaussian(), select = TRUE)
+
+# note all bs="tp" basis functions are thin-plate splines by default and appropriate for our analysis
+
+summary(m_final)
+```
+Model explained ~71.5% of variability in center of mass depth (m)
+
+# Summary of final model
+```{r}
+summary(m_final)
+mgcv::summary.gam(m_final) #same same just via {mgcv}
+```
+
+Temperature at 314 m (mean cm depth), dynamic height anomalies, MVBS (estimate of overall biomass), and Z (light) were significant terms explaining a combined 71.5% of the variance in center of mass depth (response). 
+
+# Check model fit
+```{r}
+# {mgcv} model fit
+mgcv::gam.check(m_final)
+
+# console output: Full convergence after 11 iterations (check! for full convergence!)
+
+# {gratia} model fit - same plots in ggplot format
+gratia::appraise(m_final)& #gratia version of gam.check 
+theme(panel.border = element_rect(color="black", fill=NA),
+      panel.background = element_blank())
+
+#save
+ggsave(filename=paste0("./plots/analysis 2/m_final_fit.pdf"), width=7, height=5, units="in", dpi=300)
+# NOTE: a bit of a curve in lower left that falls outside of confidence interval. Also a couple points in the extremes outside conf int but overall, I am goign to go with prett decent model fit! 
+```
+NOTE: use & instead of + to add theme elements to plots in {gratia} (otherwise it will only apply changes to last plot)
+
+# check on k (number of basis functions or wiggliness) that go into smooth function
+```{r}
+
+# {mgcv}
+mgcv::k.check(m_final) #appropriate k # of smooths
+
+# all p-values non-significant, so appropriate k values (# basis functions) for our data
+```
+# Check (double check): concurvity with modified version of full model
+All below recommended values
+```{r}
+# Test for concurvity
+# ensure "worst" concurvity for all terms < ~0.8
+conc_full=gratia::concrvity(m_final, pairwise = FALSE)
+conc_full
+format(conc_full$concurvity, scientific=FALSE)>0.8 # all below 0.8 (but just barely), run pairwise and examine as well
+
+
+# Pairwise concurvity
+conc_final <- concrvity(m_final, pairwise = TRUE)
+
+# plot output of 
+draw(conc_final)+
+  geom_text(aes(label=round(concurvity, 2)), size=2)+ #add actual values ot plot sweet none above 0.5
+  theme(axis.text.x = element_text(angle=90))
+```
+
+# Partial effects plots; the effect of a given covariate on center of mass depth
+ALL oceanographic covariates 
+
+```{r}
+#plot partial effects plots
+gratia::draw(m_final)&
+  ggthemes::theme_few()
+
+ggsave("./plots/analysis 2/gam_partialeffects_all.pdf", width=10, height=8, dpi=300)
+```
+# Select for significant covariates
+temperature at cm depth
+dynamic height
+MVBS
+Z
+(chlorophyll and oxygen were not significant)
+```{r}
+#select our significant covariates
+p1 <- draw(m_final, select = "s(temp_cm)")
+p2 <- draw(m_final, select = "s(dyn_ht_500m)")
+p3 <- draw(m_final, select = "s(MVBS)")
+p4 <- draw(m_final, select = "s(Z)")
+
+# Plot side by side
+p4+p2+p3+p1+patchwork::plot_layout(ncol=4) & ggthemes::theme_few()
+
+# Update individual plot: temp at cm
+p1=p1+
+  ggtitle("")+
+  xlab("Temp at 314 m [C]")+
+  scale_x_continuous(expand = c(0,0))+
+  ggthemes::theme_few()
+p1
+
+# Update individual plot: dynamic height
+p2=p2+
+  ggtitle("")+
+  xlab("Dynamic ht anomaly [m]")+
+  scale_x_continuous(expand = c(0,0))+
+  ggthemes::theme_few()
+
+
+# Update individual plot: MVBS
+p3=p3+
+  ggtitle("")+
+  xlab("MVBS [dB]")+
+  scale_x_continuous(expand = c(0,0))+
+  ggthemes::theme_few()
+
+
+# Update individual plot: Light (Z) depth at which light= 1% of surface irradiance
+p4=p4+
+  ggtitle("")+
+  xlab("Z [m]")+
+  scale_x_continuous(expand = c(0,0))+
+  ggthemes::theme_few()
+
+
+# Plot side by side
+p4+p3+p2+p1+patchwork::plot_layout(ncol=4) & ggthemes::theme_few()
+
+# save output
+ggsave("./plots/analysis 2/partial_effects_significant.pdf", width=10, height=4, dpi=300)
+```
+ "the smooth effect of the covariate on the response conditional upon the other estimated terms"
+ The zero line means the overall mean (on the link scale) of the response; negative values on the axis indicate wheer the effoect of the covariate reduces the response below the average value, and positiv values on the axis indicate those covariate values where the response is increased above the average All conditional upon the other estimated model terms. 
+ -G. Simpson
+ 
+# PLOT partial effects plots with mgcv instead of gratia
+mgcv::plot.gam
+https://rdrr.io/cran/mgcv/man/plot.gam.html
+select: select an individual plot (ordered 1-# of covariates)
+scale: -1 to have the same y-axis scale for each plot
+ylab="Parital effect"
+shade: 2 se confidence bands
+seWithMean:	
+if TRUE the component smooths are shown with confidence intervals that include the uncertainty about the overall mean. If FALSE then the uncertainty relates purely to the centred smooth itself. If seWithMean=2 then the intervals include the uncertainty in the mean of the fixed effects (but not in the mean of any uncensored smooths or random effects). Marra and Wood (2012) suggests that TRUE results in better coverage performance, and this is also suggested by simulation.
+
+```{r}
+
+# plot all
+#plot.gam(m_final) #defaults
+
+# save plot
+pdf(file = "./plots/analysis 2/partial_effects.pdf", width = 14, height=5, bg="white")
+
+# Plot individual plots -- Temperature
+{par(mfrow=c(1,4), family="Helvetica",  mai=c(1, 0.55, 0.25, 0.25),oma=c(0, 2, 0,0))
+# dynamic height
+plot.gam(m_final, rug = TRUE, residuals = FALSE, se=TRUE, shade=TRUE, shade.col="grey",
+      scale=-1,  ylab="", seWithMean=TRUE, select=4, xlab = "Dynamic Height [m]",cex.axis=1.75, cex.lab=2)
+title(ylab="Partial Effect", line=2.5 , cex.lab=2)
+
+# Light
+plot.gam(m_final, rug = TRUE, residuals = FALSE, se=TRUE, shade=TRUE, shade.col="grey",
+     scale=-1,  ylab="", seWithMean=TRUE, select=6, xlab = "Z (Depth Light) [m]",cex.axis=1.75, cex.lab=2)
+# MVBS
+plot.gam(m_final, rug = TRUE, residuals = FALSE, se=TRUE, shade=TRUE, shade.col="grey",
+      scale=-1,  ylab="", seWithMean=TRUE, select=5, xlab = "Mean Vol Backscatter [dB]",cex.axis=1.75, cex.lab=2)
+ #temp at cm
+plot.gam(m_final, rug = TRUE, residuals = FALSE, se=TRUE, shade=TRUE, shade.col="grey",
+      scale=-1, seWithMean=TRUE, select=2, ylab="", xlab = "Temp at 314 m [C]", cex.axis=1.75, cex.lab=2)
+}
+
+dev.off()
+```
+
+
+
+# NEXT...
+Final Rmd. Analysis 2 plots.Rmd
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
