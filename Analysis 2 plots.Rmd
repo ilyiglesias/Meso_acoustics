@@ -41,6 +41,14 @@ baty_xyz= bathy_xyz |>
 ##convert to dataframe for ggplot
 #bathy_xyz_fortify= fortify(bathy_xyz)
 ```
+# Mean depth
+overall mean depth of sampled area
+```{r}
+bathy_acoustic_track |> 
+  summarise(mean_depth=mean(depth))
+```
+
+
 
 # PLOT acoustic tracks with underlying bathymetry data
 The following plot:
@@ -63,9 +71,9 @@ ggplot(data=bathy_xyz)+
         panel.background = element_rect(fill="white"))+
   facet_wrap(~year)
 
-
 ggsave("./plots/analysis 2/coverage.pdf", dpi=300) #pdf
 ```
+
 # Basemaps
 ```{r}
 library("sf")
@@ -107,6 +115,7 @@ ggplot()+
 # save output
 ggsave("./plots/analysis 2/coverage_wide.pdf",dpi=300) #pdf
 ```
+
 # Start and end date of acoustic tracks per year
 ```{r}
 echo_integration_all |> 
