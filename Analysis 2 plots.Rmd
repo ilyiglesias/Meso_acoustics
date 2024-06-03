@@ -59,11 +59,11 @@ The following plot:
 
 ggplot(data=bathy_xyz)+
   #geom_contour(data=bathy_xyz, aes(x=V1, y=V2, z=V3), breaks = c(-200, -1000, -3000, -4000), color="#56B4E9" , linewidth=0.09)+ #Depth breaks
-  geom_contour(data=bathy_xyz, aes(x=V1, y=V2, z=V3), breaks = c(-550), color="#0072B2", size=0.5)+ # depth minimum value of 550m
-  annotate(geom="text", x=-122.1, y=36, label="550 m", color="#0072B2", size=3)+ #label contour
+  annotate(geom="text", x=-122.1, y=36, label="725 m", color="#0072B2", size=3)+ #label contour
   geom_point(data= echo_integration_all, aes(x=Lon_M, y=Lat_M), shape=21, size=0.20, color=  "#D55E00" , alpha=0.65)+ #add acoustic track location info
   geom_sf(data=states, fill= "#999999" , alpha=0.25, color="black", lwd=0.25)+ #state outline
   coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,38.5))+ #study region "core" area
+  geom_contour(data=bathy_xyz, aes(x=V1, y=V2, z=V3), breaks = c(-725), color="#0072B2", size=0.5)+ # depth minimum value of 725m
   xlab("")+
   ylab("")+
   theme(axis.text.x  = element_text(angle=90),

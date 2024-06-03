@@ -1,7 +1,13 @@
 # Meso_acoustics
-Examining the effects of the 2015-2016 marine heatwave on mesopelagic fishes in the CCE
+Examining the effects of the 2014-2016 marine heatwave on mesopelagic fishes in the CCE
 
-This project was created by Ily Iglesias to make my R code available upon publication
+This project was created by Ily Iglesias to make R code available upon publication.
+
+Data used in this analysis:
+- Processed acoustics data is available publically on Dryad (DOI): doi:10.5061/dryad.hmgqnk9s0
+- CTD data available publically via erddap at: https://oceanview.pfeg.noaa.gov/erddap/tabledap/FED_Rockfish_CTD.html
+- Satellite data available publically via erddap at: https://coastwatch.pfeg.noaa.gov/erddap/griddap/erdMH1kd4908day.html
+
 
 This project includes code to :
 - input, read/clean and calculate metrics from processed acoustics data (Read clean.Rmd)
