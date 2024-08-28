@@ -5,11 +5,10 @@ output: html_notebook
 
 # Objective of code
 
-I initially exported data in 100m horizontal by 5m vertical bins. At these distances, there is a substantial amount of spatial autocorrelation in Sv which would violate assumptions of independence for statistical analysis. We can alternatively think of this as "patch" size. This code includes a method to quantify the extent of spatial auto-correlation and provides a value to re-grid our data by (that is at an appropriate, non-correlated scale, allowing for stat analysis to proceed). 
+We exported data in 100m horizontal by 5m vertical bins. At these distances, there is a substantial amount of spatial autocorrelation in Sv which would violate assumptions of independence for statistical analysis. We can alternatively think of this as "patch" size. This code includes a method to quantify the extent of spatial auto-correlation and provides a value to re-grid our data by (at a spatial independent distance)
 
 # Background 
-Moran's I: measures degree of association of single variable with itself at different points in space as a function of distance between points (called a spatial lag). I am interested in calculating a Moran's I value for our acoustic biomass data to see whether biomass is autocorrelated and if so, at what scale. Based on this distance, I can create bigger echo-integration units (at range where no longer correlated). 
-
+Moran's I: measures degree of association of single variable with itself at different points in space as a function of distance between points (called a spatial lag). We are interested in calculating a Moran's I value for our acoustic backscatter data to see whether backscatter is autocorrelated and if so, at what scale. 
 #load libraries
 ```{r}
 library(tidyverse) #data wrangling plotting
@@ -17,7 +16,7 @@ library(ncf) # correlograms
 ```
 
 # Calculate correlograms
-The following code creates a correlogram (Moran's I) for each year of our survey separately using as input the 100m horizontal, echointegrated grid-cell values. 
+The following code creates a correlogram (Moran's I) for each year of our survey separately using as input the 100 m horizontal, echointegrated grid-cell values (those with at least 75 of 100 vertical cells)
 
 NOTE: resample: I used a resample value of 500 (run time is long and didn't seem to vary with input of 999)
 NOTE: z value: currently using MVBS
@@ -28,7 +27,7 @@ $x.intercept: the x-intercept is the distance at which object are no more simila
 $p: p-value (significance of correlation): if non-significant, can also say no different than random distribution
 $correlation: Moran's value
 
-# INPUT: 100m horizontal grid cells 
+# INPUT: 100 m horizontal grid cells 
 ```{r}
 yr=c("2013", "2014", "2015", "2016", "2017", "2018") # going to iterate over each year in our study
 
@@ -38,7 +37,7 @@ for (i in 1: length(yr)){
   
     #select for survey year
     yr_echo <- echo_integration %>%
-                 filter(Year %in% yr[i])
+                 filter(year %in% yr[i])
     
     print(yr[i]) #print year
     
@@ -84,16 +83,14 @@ palette.colors(palette=="Okabe-Ito")
 
 # Plot in base R
 
-
-
 {par(family="Times")
-  plot(corr_output[[1]], ylim=c(-1,1), xlim=c(0,50), xaxp=c(0,50,25), xlab="Distance (km)", ylab="Moran's I", main=NULL, cex.axis=2, cex.lab=2)
+  plot(corr_output[[1]], ylim=c(-1,1), xlim=c(0,50), xaxp=c(0,50,10), xlab="Distance (km)", ylab="Moran's I", main=NULL, cex.axis=1.5, cex.lab=2)
 abline(h=0) #create zero line
 abline(v=corr_output[[1]]$x.intercept, col="#D55E00", lwd=2 ) #plot vertical line at x-intercept
 abline(v=min(which(corr_output[[1]]$p>=0.05)), col="#0072B2", lwd=2 ) #vertical line where p-value >0.05
-text(x=corr_output[[1]]$x.intercept+9, y=0.5, paste0("x-int: ", round(corr_output[[1]]$x.intercept, 1), " km"), cex=2, col="#D55E00" )
-text(x=min(which(corr_output[[1]]$p>=0.05))-4.5, y=0.85, paste0("p>0.05: ", round(min(which(corr_output[[1]]$p>=0.05)),1), " km"), cex=2, col="#0072B2")
-text(x=5, y=-0.90, "2013", cex=3, col="#000000")}
+text(x=40, y=0.5, paste0("x-int: ", round(corr_output[[1]]$x.intercept, 1), " km"), cex=2, col="#D55E00" )
+text(x=40, y=0.85, paste0("p>0.05: ", round(min(which(corr_output[[1]]$p>=0.05)),1), " km"), cex=2, col="#0072B2")
+text(x=45, y=-0.90, "2013", cex=3, col="#000000")}
     
 # save correlogram
     dev.off()
@@ -110,13 +107,13 @@ text(x=5, y=-0.90, "2013", cex=3, col="#000000")}
 
 
 {par(family="Times")
-  plot(corr_output[[2]], ylim=c(-1,1), xlim=c(0,50), xaxp=c(0,50,25), xlab="Distance (km)", ylab="Moran's I", main=NULL, cex.axis=2, cex.lab=2)
+  plot(corr_output[[2]], ylim=c(-1,1), xlim=c(0,50), xaxp=c(0,50,10), xlab="Distance (km)", ylab="Moran's I", main=NULL, cex.axis=1.5, cex.lab=2)
 abline(h=0) #create zero line
 abline(v=corr_output[[2]]$x.intercept, col="#D55E00", lwd=2 ) #plot vertical line at x-intercept
 abline(v=min(which(corr_output[[2]]$p>=0.05)), col="#0072B2", lwd=2 ) #vertical line where p-value >0.05
-text(x=corr_output[[2]]$x.intercept-9, y=0.75, paste0("x-int: ", round(corr_output[[2]]$x.intercept, 1), " km"), cex=2, col="#D55E00" )
-text(x=min(which(corr_output[[2]]$p>=0.05))+9, y=0.75, paste0("p>0.05: ", round(min(which(corr_output[[2]]$p>=0.05)),1), " km"), cex=2, col="#0072B2")
-text(x=5, y=-0.90, "2014", cex=3, col="#000000")}
+text(x=40, y=0.5, paste0("x-int: ", round(corr_output[[2]]$x.intercept, 1), " km"), cex=2, col="#D55E00" )
+text(x=40, y=0.85, paste0("p>0.05: ", round(min(which(corr_output[[2]]$p>=0.05)),1), " km"), cex=2, col="#0072B2")
+text(x=45, y=-0.90, "2014", cex=3, col="#000000")}
     
 # save correlogram
     dev.off()
@@ -135,13 +132,13 @@ text(x=5, y=-0.90, "2014", cex=3, col="#000000")}
 
 
 {par(family="Times")
-  plot(corr_output[[3]], ylim=c(-1,1), xlim=c(0,50), xaxp=c(0,50,25), xlab="Distance (km)", ylab="Moran's I", main=NULL, cex.axis=2, cex.lab=2)
+  plot(corr_output[[3]], ylim=c(-1,1), xlim=c(0,50), xaxp=c(0,50,10), xlab="Distance (km)", ylab="Moran's I", main=NULL, cex.axis=1.5, cex.lab=2)
 abline(h=0) #create zero line
 abline(v=corr_output[[3]]$x.intercept, col="#D55E00", lwd=2 ) #plot vertical line at x-intercept
 abline(v=min(which(corr_output[[3]]$p>=0.05)), col="#0072B2", lwd=2 ) #vertical line where p-value >0.05
-text(x=corr_output[[3]]$x.intercept+9, y=0.5, paste0("x-int: ", round(corr_output[[3]]$x.intercept,1), " km"), cex=2, col="#D55E00" )
-text(x=min(which(corr_output[[3]]$p>=0.05))-9, y=0.95, paste0("p>0.05: ", round(min(which(corr_output[[3]]$p>=0.05)),1), " km"), cex=2, col="#0072B2")
-text(x=5, y=-0.90, "2015", cex=3, col="#000000")}
+text(x=40, y=0.5, paste0("x-int: ", round(corr_output[[3]]$x.intercept,1), " km"), cex=2, col="#D55E00" )
+text(x=40, y=0.85, paste0("p>0.05: ", round(min(which(corr_output[[3]]$p>=0.05)),1), " km"), cex=2, col="#0072B2")
+text(x=45, y=-0.90, "2015", cex=3, col="#000000")}
     
 # save correlogram
     dev.off()
@@ -157,13 +154,13 @@ text(x=5, y=-0.90, "2015", cex=3, col="#000000")}
 # Plot in base R
 
 {par(family="Times")
-  plot(corr_output[[4]], ylim=c(-1,1), xlim=c(0,75), xaxp=c(0,75, 15), xlab="Distance (km)", ylab="Moran's I", main=NULL, cex.axis=2, cex.lab=2)
+  plot(corr_output[[4]], ylim=c(-1,1), xlim=c(0,75), xaxp=c(0,75, 15), xlab="Distance (km)", ylab="Moran's I", main=NULL, cex.axis=1.5, cex.lab=2)
 abline(h=0) #create zero line
 abline(v=corr_output[[4]]$x.intercept, col="#D55E00", lwd=2 ) #plot vertical line at x-intercept
 abline(v=min(which(corr_output[[4]]$p>=0.05)), col="#0072B2", lwd=2 ) #vertical line where p-value >0.05
-text(x=corr_output[[4]]$x.intercept-13, y=0.9, paste0("x-int: ", round(corr_output[[4]]$x.intercept, 1), " km"), cex=2, col="#D55E00" )
-text(x=min(which(corr_output[[4]]$p>=0.05))-17, y=-0.5, paste0("p>0.05: ", round(min(which(corr_output[[4]]$p>=0.05)),1), " km"), cex=2, col="#0072B2")
-text(x=5, y=-0.90, "2016", cex=3, col="#000000")}
+text(x=15, y=-0.5, paste0("x-int: ", round(corr_output[[4]]$x.intercept, 1), " km"), cex=2, col="#D55E00" )
+text(x=15, y=-0.85, paste0("p>0.05: ", round(min(which(corr_output[[4]]$p>=0.05)),1), " km"), cex=2, col="#0072B2")
+text(x=68, y=-0.90, "2016", cex=3, col="#000000")}
     
 # save correlogram
     dev.off()
@@ -178,13 +175,13 @@ text(x=5, y=-0.90, "2016", cex=3, col="#000000")}
 # Plot in base R
 
 {par(family="Times")
-  plot(corr_output[[5]], ylim=c(-1,1), xlim=c(0,75), xaxp=c(0,75,15), xlab="Distance (km)", ylab="Moran's I", main=NULL, cex.axis=2, cex.lab=2)
+  plot(corr_output[[5]], ylim=c(-1,1), xlim=c(0,75), xaxp=c(0,75,15), xlab="Distance (km)", ylab="Moran's I", main=NULL, cex.axis=1.5, cex.lab=2)
 abline(h=0) #create zero line
 abline(v=corr_output[[5]]$x.intercept, col="#D55E00", lwd=2 ) #plot vertical line at x-intercept
 abline(v=min(which(corr_output[[5]]$p>=0.05)), col="#0072B2", lwd=2 ) #vertical line where p-value >0.05
-text(x=corr_output[[5]]$x.intercept+12, y=0.5, paste0("x-int: ", round(corr_output[[5]]$x.intercept, 1), " km"), cex=2, col="#D55E00" )
-text(x=min(which(corr_output[[5]]$p>=0.05))-14, y=0.85, paste0("p>0.05: ", round(min(which(corr_output[[5]]$p>=0.05)),1), " km"), cex=2, col="#0072B2")
-text(x=5, y=-0.90, "2017", cex=3, col="#000000")}
+text(x=60, y=0.65, paste0("x-int: ", round(corr_output[[5]]$x.intercept, 1), " km"), cex=2, col="#D55E00" )
+text(x=60, y=0.85, paste0("p>0.05: ", round(min(which(corr_output[[5]]$p>=0.05)),1), " km"), cex=2, col="#0072B2")
+text(x=65, y=-0.90, "2017", cex=3, col="#000000")}
     
 # save correlogram
     dev.off()
@@ -199,13 +196,13 @@ text(x=5, y=-0.90, "2017", cex=3, col="#000000")}
 # Plot in base R
 
 {par(family="Times")
-  plot(corr_output[[6]], ylim=c(-1,1), xlim=c(0,50), xaxp=c(0,50, 25), xlab="Distance (km)", ylab="Moran's I", main=NULL, cex.axis=2, cex.lab=2)
+  plot(corr_output[[6]], ylim=c(-1,1), xlim=c(0,50), xaxp=c(0,50, 10), xlab="Distance (km)", ylab="Moran's I", main=NULL, cex.axis=1.5, cex.lab=2)
 abline(h=0) #create zero line
 abline(v=corr_output[[6]]$x.intercept, col="#D55E00", lwd=2 ) #plot vertical line at x-intercept
 abline(v=min(which(corr_output[[6]]$p>=0.05)), col="#0072B2", lwd=2 ) #vertical line where p-value >0.05
-text(x=corr_output[[6]]$x.intercept-11, y=0.5, paste0("x-int: ", round(corr_output[[6]]$x.intercept, 1), " km"), cex=2, col="#D55E00" )
-text(x=min(which(corr_output[[6]]$p>=0.05))+11.5, y=-0.5, paste0("p>0.05: ", round(min(which(corr_output[[6]]$p>=0.05)),1), " km"), cex=2, col="#0072B2")
-text(x=5, y=-0.90, "2018", cex=3, col="#000000")}
+text(x=40, y=0.5, paste0("x-int: ", round(corr_output[[6]]$x.intercept, 1), " km"), cex=2, col="#D55E00" )
+text(x=40, y=0.85, paste0("p>0.05: ", round(min(which(corr_output[[6]]$p>=0.05)),1), " km"), cex=2, col="#0072B2")
+text(x=45, y=-0.90, "2018", cex=3, col="#000000")}
     
 # save correlogram
     dev.off()
@@ -217,36 +214,36 @@ Now that we have our correlogram output, I would like to calculate a numerical v
 ```{r estimating range}
 
 # xintercept for each year
-corr_output[[1]]$x.intercept # 2013 x.intercept 19.30433 
-corr_output[[2]]$x.intercept # 2014 x.intercept 21.08738
-corr_output[[3]]$x.intercept # 2015 x.intercept 17.15684 
-corr_output[[4]]$x.intercept # 2016 x.intercept 58.88189  
-corr_output[[5]]$x.intercept # 2017 x.intercept 20.02932 
-corr_output[[6]]$x.intercept # 2018 x.intercept 26.05613
+corr_output[[1]]$x.intercept # 2013 x.intercept 8.82
+corr_output[[2]]$x.intercept # 2014 x.intercept 29.83
+corr_output[[3]]$x.intercept # 2015 x.intercept 18.59
+corr_output[[4]]$x.intercept # 2016 x.intercept 57.43
+corr_output[[5]]$x.intercept # 2017 x.intercept 22.77 
+corr_output[[6]]$x.intercept # 2018 x.intercept 26.46
 
 # distance at minimum p
-min(which(corr_output[[1]]$p>=0.05)) # 2013 distance where p-value crossed: 15
-min(which(corr_output[[2]]$p>=0.05)) # 2014 distance where p-value crossed: 30
-min(which(corr_output[[3]]$p>=0.05)) # 2015 distance where p-value crossed: 16
-min(which(corr_output[[4]]$p>=0.05)) # 2016 distance where p-value crossed: 62
-min(which(corr_output[[5]]$p>=0.05)) # 2017 distance where p-value crossed: 70
-min(which(corr_output[[6]]$p>=0.05)) # 2018 distance where p-value crossed: 28
+min(which(corr_output[[1]]$p>=0.05)) # 2013 distance where p-value crossed: 14
+min(which(corr_output[[2]]$p>=0.05)) # 2014 distance where p-value crossed: 29
+min(which(corr_output[[3]]$p>=0.05)) # 2015 distance where p-value crossed: 20
+min(which(corr_output[[4]]$p>=0.05)) # 2016 distance where p-value crossed: 57
+min(which(corr_output[[5]]$p>=0.05)) # 2017 distance where p-value crossed: 76
+min(which(corr_output[[6]]$p>=0.05)) # 2018 distance where p-value crossed: 26
 
 # Mean minimum distance of correlation (x.intercept or p-value, whichever came first!)
 
-distances <- c(15, 21.08738, 16, 58.88189, 20.02932, 26.05613) #2013-2018 x.intercept or dist where p-value >=0.5
-mean(distances) # 26.18
-median(distances) # 20.55
+distances <- c(8.82, 29, 18.59, 57, 22.77, 26) #2013-2018 x.intercept or dist where p-value >=0.5
+mean(distances) # 27.03
+median(distances) # 24.385
 
 # correlation value (Moran's I) less than 0.05 (ie really close to zero) for reference:
-min(which(corr_output[[1]]$correlation<0.05)) #2013: 11
-min(which(corr_output[[2]]$correlation<0.05)) #2014: 17
-min(which(corr_output[[3]]$correlation<0.05)) #2015: 14
-min(which(corr_output[[4]]$correlation<0.05)) #2016: 58
-min(which(corr_output[[5]]$correlation<0.05)) #2017: 20
-min(which(corr_output[[6]]$correlation<0.05)) #2018: 26
+min(which(corr_output[[1]]$correlation<0.05)) #2013: 10
+min(which(corr_output[[2]]$correlation<0.05)) #2014: 27
+min(which(corr_output[[3]]$correlation<0.05)) #2015: 18
+min(which(corr_output[[4]]$correlation<0.05)) #2016: 53
+min(which(corr_output[[5]]$correlation<0.05)) #2017: 23
+min(which(corr_output[[6]]$correlation<0.05)) #2018: 24
 
-sum(11, 17, 14, 58, 20, 26)/6 #24.3km
+sum(10, 27, 18, 53, 23, 24)/6 #25.83 km
 
 rm(distances)
 ```

@@ -4,7 +4,7 @@ output: html_notebook
 ---
 
 # Objective of code:
-In this final .Rmd following Analysis 2 GAM.Rmd, we are interested in plotting the various ctd data and study region
+In this final .Rmd following Analysis 2 GAM.Rmd, we are interested in plotting our study region, calculating summary stats about our acoustic tracks and plotting the location various ctd data 
 
 - bathymetry map of acoustic tracks (where did we sample?)
 - each oceanographic variable plotted per year
@@ -71,7 +71,7 @@ ggplot(data=bathy_xyz)+
         panel.background = element_rect(fill="white"))+
   facet_wrap(~year)
 
-ggsave("./plots/analysis 2/coverage.pdf", dpi=300) #pdf
+#ggsave("./plots/coverage.pdf", dpi=300) #pdf
 ```
 
 # Basemaps
@@ -126,8 +126,18 @@ echo_integration_all |>
 Note that I am assuming here that the ctd_deep_data_core df is the final version of what was included in each grid cell (I believe this is the case, but its been awhile and there may have been some additional filtering). Pretty sure these are correct. 
 ```{r}
 ctd_deep_data_core |> 
-  group_by(Year) |> 
-  reframe(time_range=range(day_ctd)) #start and end dates per year
+  group_by(year) |> 
+  reframe(min_date= min(date_parsed, na.rm = T),
+          max_date= max(date_parsed, na.rm = T)) #start and end dates per year
+
+
+# Number of total ctds
+acoustics_ctd |> 
+  group_by(year) |> 
+  summarise(no_ctds=sum(count_ctds))
+
+acoustics_ctd |> 
+  summarise(no_ctds=sum(count_ctds)) #total of 191 casts
 ```
 
 # PLOT of grid cells with acoustic track and CTD position overlaid 
@@ -265,15 +275,15 @@ more negative== more upwelling (greater tilt in isopycnal)
 more positive== less upwelling
 
 
-#oxygen at 150m
+#oxygen at 175m
 ```{r}
 ggplot()+
   geom_sf(data=states)+ # add a basemap
   coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39))+ #study region
-  geom_point(data=acoustics_ctd, aes(x=lon, y=lat, fill=o2_150m), size=3.8, shape=22)+  # Z is the depth at which light is 1% of surface
+  geom_point(data=acoustics_ctd, aes(x=lon, y=lat, fill=o2_175m), size=3.8, shape=22)+  # Z is the depth at which light is 1% of surface
   cmocean::scale_fill_cmocean(name="thermal", direction=-1)+
   geom_text(data=acoustics_ctd, aes(x=lon, y=lat, label=round(cm_m, 0)), size=1)+  # label cm depth
-  labs(fill="O2 at 150 m")+
+  labs(fill="DO at 175 m")+
   guides(fill=guide_colorbar(reverse=TRUE))+
   theme(panel.background = element_blank(),
         axis.text.x = element_text(angle=90))+
@@ -302,7 +312,7 @@ ggplot()+
 # save output
 ggsave("./plots/analysis 2/oceano/mvbs.pdf") 
 ```
-# Temperature at cm depth (314 m)
+# Temperature at cm depth (322 m)
 ```{r}
 ggplot()+
   geom_sf(data=states)+ # add a basemap
@@ -335,19 +345,22 @@ summary_yrs= acoustics_ctd |>
                          mean_dyn_ht=mean(dyn_ht_500m),
                          median_MVBS=median(MVBS),
                          mean_MVBS=mean(MVBS),
-                         median_temp_cm=median(temp_cm),
-                         mean_temp_cm=mean(temp_cm),
+                         median_temp_10m=median(temp_10m),
+                         mean_temp_10m=mean(temp_10m),
+                         median_temp_175m=median(temp_175m),
+                         mean_temp_175m=mean(temp_175m),
                          median_Z=median(Z),
                          mean_Z= mean(Z),
-                         median_o2_150m= median(o2_150m),
-                         mean_o2_150m=mean(o2_150m),
+                         median_o2_175m= median(o2_175m),
+                         mean_o2_175m=mean(o2_175m),
+                         median_o2_500m=median(o2_500m),
+                         mean_o2_500m=mean(o2_500m),
                          median_chl=median(chl_100m),
                          mean_chl=mean(chl_100m),
                          n=n()) #calculate the mean value per year
 
 summary_yrs$year= as.factor(summary_yrs$year) # convert year to a factor
 class(summary_yrs$year)
-
 ```
 
 # Dynamic height between years
@@ -358,15 +371,15 @@ ggplot(data=acoustics_ctd, aes(x=as.factor(year), y=dyn_ht_500m, group=year, col
   geom_boxplot( aes(group=year), outlier.shape=NA, show.legend = FALSE)+ #plot boxplots without outliers since in jitter
   scale_color_manual(values = c("2013"="black" , "2014"="black", "2015"="#D55E00" , "2016"= "#D55E00" , "2017"="black", "2018"="black"))+
   geom_jitter(alpha=0.3, color="#999999" , width=0.15)+ #add actual data points to our boxplot
-  geom_text(data= summary_yrs, aes(x = year, y = median_dyn_ht, label = paste0("Median:", round(median_dyn_ht, 2))), size = 3, vjust = -0.5)+ #label median 
+  geom_text(data= summary_yrs, aes(x = year, y = median_dyn_ht, label = paste0("Median:", round(median_dyn_ht, 2))), size = 2.5, vjust = -0.5)+ #label median 
   #geom_text(data= summary_yrs, aes(x =year, y = median_dyn_ht, label = paste0("n: ", n)), size = 3, vjust = 1.5, color="black")+ #label sample size 
   geom_hline(yintercept=0, linewidth=0.5, color="black", alpha=0.6)+ # 0 intercept
   xlab("Year")+
-  ylab("Dynamic height anomaly (m)")+
+  ylab("Dynamic height anomaly [m]")+
   ggthemes::theme_few()+
   theme(legend.position = 'none')
 
-ggsave(filename = "./plots/analysis 2/oceano/box_dyn_ht.pdf", width=8.5, dpi=300)
+ggsave(filename = "./plots/analysis 2/oceano/box_dyn_ht.pdf", width=170, height= 100,units="mm", dpi=300)
 ```
 Interpretation: during the two warmest years, there seems to be an increase in dynamic height, indicative of decreased upwelling (negative values= more upwelling), 0-+ values= less upwelling, especially in 2016. 
 
@@ -382,33 +395,55 @@ ggplot(data=acoustics_ctd, aes(x=as.factor(year), y=Z, group=year, color=as.fact
   geom_boxplot( aes(group=year), outlier.shape=NA, show.legend = FALSE)+ #plot boxplots without outliers since in jitter
   scale_color_manual(values = c("2013"="black" , "2014"="black", "2015"="#D55E00" , "2016"= "#D55E00" , "2017"="black", "2018"="black"))+
   geom_jitter(alpha=0.3, color="#999999" , width=0.15)+
-  geom_text(data= summary_yrs, aes(x = year, y = median_Z, label = paste0("Median:", round(median_Z, 2))), size = 3, vjust = -0.5)+ #label
+  geom_text(data= summary_yrs, aes(x = year, y = median_Z, label = paste0("Median:", round(median_Z, 2))), size = 2.5, vjust = -0.5)+ #label
   scale_y_reverse()+ #deeper at bottom of plot easier for me to grasp
   xlab("Year")+
-  ylab("Depth at which light ~1% of surface [m]")+
+  ylab("Euphotic depth (Z) [m]")+
   ggthemes::theme_few()+
   theme(legend.position = 'none')
 
-ggsave(filename = "./plots/analysis 2/oceano/box_light.pdf", width=8.5, dpi=300)
+ggsave(filename = "./plots/analysis 2/oceano/box_light.pdf", width=170, height= 100,units="mm", dpi=300)
 ```
-# Temp at meso depths (314m) between years 
+# Temp at meso depths (175m) between years 
 ```{r}
 
-ggplot(data=acoustics_ctd, aes(x=as.factor(year), y=temp_cm, group=year, color=as.factor(year)))+
+ggplot(data=acoustics_ctd, aes(x=as.factor(year), y=temp_175m, group=year, color=as.factor(year)))+
   stat_boxplot(geom="errorbar", width=0.25)+
   geom_boxplot( aes(group=year), outlier.shape=NA, show.legend = FALSE)+ #plot boxplots without outliers since in jitter
   scale_color_manual(values = c("2013"="black" , "2014"="black", "2015"="#D55E00" , "2016"= "#D55E00" , "2017"="black", "2018"="black"))+
   geom_jitter(alpha=0.3, color="#999999" , width=0.15)+
-  geom_text(data= summary_yrs, aes(x = year, y = median_temp_cm, label = paste0("Median:", round(median_temp_cm, 2))), size = 3, vjust = -0.5)+ #label
-  #geom_text(data= summary_yrs, aes(x =year, y = median_temp_cm, label = paste0("n: ", n)), size = 2, vjust = 1.5, color="black")+ #label sample size 
+  geom_text(data= summary_yrs, aes(x = factor(year), y = median_temp_175m, label = paste0("Median:", round(median_temp_175m, 2))), size = 2.5, vjust = -0.5)+ #label
+  #geom_text(data= summary_yrs, aes(x =factor(year), y = median_temp_175m, label = paste0("n: ", n)), size = 2, vjust = 1.5, color="black")+ #label sample size 
   xlab("Year")+
-  ylab("Temperature at 314 m [C]")+
+  ylab("Temperature at 175 m [C]")+
   ggthemes::theme_few()+
   theme(legend.position = 'none')
 
-ggsave(filename = "./plots/analysis 2/oceano/box_temp_meso.pdf", width=8.5, dpi=300)
+ggsave(filename = "./plots/analysis 2/oceano/box_temp_meso.pdf", width=170, height= 100,units="mm", dpi=300)
 ```
 Note that the changes in temperature here were pretty minimal: less than half of a degree but then again Jerome had said that any change during this time was probably a big deal at these depths
+
+
+# Temp at meso depths (175m) between years 
+```{r}
+
+ggplot(data=acoustics_ctd, aes(x=as.factor(year), y=temp_10m, group=year, color=as.factor(year)))+
+  stat_boxplot(geom="errorbar", width=0.25)+
+  geom_boxplot( aes(group=year), outlier.shape=NA, show.legend = FALSE)+ #plot boxplots without outliers since in jitter
+  scale_color_manual(values = c("2013"="black" , "2014"="black", "2015"="#D55E00" , "2016"= "#D55E00" , "2017"="black", "2018"="black"))+
+  geom_jitter(alpha=0.3, color="#999999" , width=0.15)+
+  geom_text(data= summary_yrs, aes(x = factor(year), y = median_temp_10m, label = paste0("Median:", round(median_temp_10m, 2))), size = 2.5, vjust = -0.5)+ #label
+  #geom_text(data= summary_yrs, aes(x =factor(year), y = median_temp_175m, label = paste0("n: ", n)), size = 2, vjust = 1.5, color="black")+ #label sample size 
+  xlab("Year")+
+  ylab("Temperature in upper 10 m [C]")+
+  ggthemes::theme_few()+
+  theme(legend.position = 'none')
+
+ggsave(filename = "./plots/analysis 2/oceano/box_temp_surface.pdf", width=170, height= 100,units="mm", dpi=300)
+```
+
+
+
 
 # MVBS between years
 ```{r}
@@ -418,13 +453,13 @@ ggplot(data=acoustics_ctd, aes(x=as.factor(year), y=MVBS, group=year, color=as.f
   geom_boxplot( aes(group=year), outlier.shape=NA, show.legend = FALSE)+ #plot boxplots without outliers since in jitter
   scale_color_manual(values = c("2013"="black" , "2014"="black", "2015"="#D55E00" , "2016"= "#D55E00" , "2017"="black", "2018"="black"))+
   geom_jitter(alpha=0.3, color="#999999" , width=0.15)+
-  geom_text(data= summary_yrs, aes(x = year, y = median_MVBS, label = paste0("Median:", round(median_MVBS, 2))), size = 3, vjust = -0.5)+ #label
+  geom_text(data= summary_yrs, aes(x = factor(year), y = median_MVBS, label = paste0("Median:", round(median_MVBS, 2))), size = 2.5, vjust = -0.5)+ #label
   xlab("Year")+
-  ylab("MVBS [dB]")+
+  ylab("MVBS [dB re 1 m-1]")+
   ggthemes::theme_few()+
   theme(legend.position = 'none')
 
-ggsave(filename = "./plots/analysis 2/oceano/box_mvbs.pdf", width=8.5, dpi=300)
+ggsave(filename = "./plots/analysis 2/oceano/box_mvbs.pdf", width=170, height= 100,units="mm", dpi=300)
 ```
 # Chl-a
 ```{r}
@@ -434,31 +469,31 @@ ggplot(data=acoustics_ctd, aes(x=as.factor(year), y=chl_100m, group=year, color=
   geom_boxplot( aes(group=year), outlier.shape=NA, show.legend = FALSE)+ #plot boxplots without outliers since in jitter
   scale_color_manual(values = c("2013"="black" , "2014"="black", "2015"="#D55E00" , "2016"= "#D55E00" , "2017"="black", "2018"="black"))+
   geom_jitter(alpha=0.3, color="#999999" , width=0.15)+
-  geom_text(data= summary_yrs, aes(x = year, y = median_chl, label = paste0("Median:", round(median_chl, 2))), size = 3, vjust = -0.5)+ #label
+  geom_text(data= summary_yrs, aes(x = factor(year), y = median_chl, label = paste0("Median:", round(median_chl, 2))), size = 2.5, vjust = -0.5)+ #label
   xlab("Year")+
-  ylab("Chl in upper 100 m")+
+  ylab("Chl in upper 100 m [ug/L]")+
   ggthemes::theme_few()+
   theme(legend.position = 'none')
 
-ggsave(filename = "./plots/analysis 2/oceano/box_chl.pdf", width=8.5, dpi=300)
+ggsave(filename = "./plots/analysis 2/oceano/box_chl.pdf", width=170, height= 100,units="mm", dpi=300)
 ```
 If i want to add values, need to add to summary_yrs (can do easily, but haven't)
 
 # Oxygen
 ```{r}
 
-ggplot(data=acoustics_ctd, aes(x=as.factor(year), y=o2_150m, group=year, color=as.factor(year)))+
+ggplot(data=acoustics_ctd, aes(x=as.factor(year), y=o2_175m, group=year, color=as.factor(year)))+
   stat_boxplot(geom="errorbar", width=0.25)+
   geom_boxplot( aes(group=year), outlier.shape=NA, show.legend = FALSE)+ #plot boxplots without outliers since in jitter
   scale_color_manual(values = c("2013"="black" , "2014"="black", "2015"="#D55E00" , "2016"= "#D55E00" , "2017"="black", "2018"="black"))+
   geom_jitter(alpha=0.3, color="#999999" , width=0.15)+
-  geom_text(data= summary_yrs, aes(x = year, y = median_o2_150m, label = paste0("Median:", round(median_o2_150m, 2))), size = 3, vjust = -0.5)+ #label
+  geom_text(data= summary_yrs, aes(x = factor(year), y = median_o2_175m, label = paste0("Median:", round(median_o2_175m, 2))), size = 2.5, vjust = 1.5)+ #label
   xlab("Year")+
-  ylab("Oxygen at 150 m [ml/l]")+
+  ylab("Oxygen at 175 m [ml/l]")+
   ggthemes::theme_few()+
   theme(legend.position = 'none')
 
-ggsave(filename = "./plots/analysis 2/oceano/box_DO.pdf", width=8.5, dpi=300)
+ggsave(filename = "./plots/analysis 2/oceano/box_DO.pdf", width=170, height= 100,units="mm", dpi=300)
 ```
 
 
@@ -470,7 +505,7 @@ acoustics_ctd: df with mean values per acoustic grid cell (25km)
 # Oceanographic variability
 ```{r}
 # Light Z
-range(acoustics_ctd$Z) # 6.27 -- 72m
+range(acoustics_ctd$Z) # 7-71
 # determine year of min and max values
 acoustics_ctd[acoustics_ctd$Z==min(acoustics_ctd$Z),"year"] #2014
 acoustics_ctd[acoustics_ctd$Z==max(acoustics_ctd$Z),"year"] #2015
@@ -482,7 +517,7 @@ acoustics_ctd[acoustics_ctd$MVBS==min(acoustics_ctd$MVBS),"year"] # 2017
 acoustics_ctd[acoustics_ctd$MVBS==max(acoustics_ctd$MVBS),"year"] # 2015
 
 # Temp at 314 m
-range(acoustics_ctd$temp_cm) # 6.315 to 8.00 )314 m
+range(acoustics_ctd$temp_175m) # 6.315 to 8.00 )314 m
 # determine year of min and max values
 acoustics_ctd[acoustics_ctd$temp_cm==min(acoustics_ctd$temp_cm),"year"] # 2016
 acoustics_ctd[acoustics_ctd$temp_cm==max(acoustics_ctd$temp_cm),"year"] # 2014

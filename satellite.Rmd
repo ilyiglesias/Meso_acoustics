@@ -9,7 +9,7 @@ Extract information about light from satellite data via ERDDAP (Aqua Modis satel
 
 
 # Background
-We did not have CTD light data available for all years of our study, and so the following code extracts satellite light data for the location of our acosutics tracks
+We did not have CTD light data available for all years of our study, and so the following code extracts satellite light data for the location of our acoustics tracks
 
 8-day composite in 4km grid cells
 
@@ -56,8 +56,8 @@ k490_info <- rerddap::info('erdMH1kd4908day') # 8 day composite data
 
 # Create a date column that matches desired format year-month-day
 
-echo_integration_all$month= stringr::str_sub(echo_integration_all$Day, "1", "2")
-echo_integration_all$day= stringr::str_sub(echo_integration_all$Day, "3", "4") #start and end pos
+echo_integration_all$month= stringr::str_sub(echo_integration_all$day, "1", "2")
+echo_integration_all$day= stringr::str_sub(echo_integration_all$day, "3", "4") #start and end pos
 
 # Make a new column that is a date in the format year-month-day
 echo_integration_all= echo_integration_all |> 
@@ -273,7 +273,6 @@ rm(light_yr, light_yr_sf, x_yr, x_yr_df) #output from for loop
 
 ```
 
-# ILY YOU ARE HERE: JOIN
 # Now join our re-gridded light data to our existing oceanographic variables
 
 ```{r}
@@ -296,701 +295,169 @@ acoustics_ctd= acoustics_ctd |>
 
 ```
 
-Total of 88 cells that have acoustics data, CTD data and satellite light data
+Total of 86 cells that have acoustics data, CTD data and satellite light data
 
 # Next
-...
+.....
 
 
 
 
+# TO address reviewer comment 
+At a minimum, the authors need to use these observations to see how well Aquamodis data reflected water column light penetration in years that had both datasets...
 
+#calculate the depth at which PAR sensor reached 0?
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# FOR REF
-# Extract light data for our survey dates and locations
-
-I am thinking it MIGHT make sense to extract the survey dates for each year and come up with an average value per 4km (I believe that is the resolution of the MODIS data)....
-
-I am using output df from as this has a cell 100m for each survey day (finest resolution that we have, none excluded from plot) I could also use output df. 
-NOTE: these data haven't been selected for only those columns of water with 10 or more cells. This is ALL survey data for a given year. So in some cases, in the event that cells were excludedf because there was less than a specific number of acoustic cells per larger 25km cell, we might have light data with no acoustics. I think this is fine, as we are just interested in capturing the dates generally.
-
-```{r extract survey date info}
-
-# Which dates in which survey year
-output |> 
-  group_by(Year) |> 
-  dplyr::summarize(start_date=min(Day), end_date=max(Day), 
-                   min_lat=min(Lat_M), max_lat=max(Lat_M), 
-                   min_lon=min(Lon_M), max_lon=max(Lon_M), .groups="drop")
-
-# note that I believe these are in regular ol PST or if UTC, are at the day level so I am going to say close enough! 
-
-```
-LETS SEE...so i could technically extract daily data for these dates and times and then select (using extracto?!) data for each "day" of the survey? or from the closest week? Hmmmm 
-
-
-# Currently planning to use
-
-https://coastwatch.pfeg.noaa.gov/erddap/griddap/erdMH1kd4901day.html
-The 1 day composite, science quality 2003-present
-
-# main drawback will be whether 1 day is sufficent when there were clouds present. 
-May want to use weekly composite instead?! 
-
-
-
-# PRACTICE extracting data for 2013
-In 2013, data were collected from 0510 to 0601 and the latitudes 36.4--38.4 & longitudes -124.1 -- -122.0-
-
-I manually typed this into the data field just to play aroudn here-- it would be better if I first reviewed some old code for extracting these data directly from the erddap servers! 
-
-# read data
-```{r}
-kd490_2013= read.csv("erdMH1kd4901day_109f_b1e4_c717.csv", header=T)
-
-# create a column for "Day" 
-kd490_2013= kd490_2013 |> 
-  mutate(year=lubridate::year(time)) |> 
-  mutate(month= lubridate::month(time)) |> 
-  mutate(day= lubridate::day(time)) |> 
-  mutate(mon_day=paste0(month, day))
-
-
-# this doesn't appear to be composid data?! Or at least there are multiple entries per location: ie thjere are mjultiple locations for each time step 
-
-
-```
-
-# plot data-- overlay acoustic tracks??
 ```{r}
 
-# plot cover of kd490 data per day 
-ggplot()+
-  geom_point(data= dplyr::filter(kd490_2013, !is.na(k490)), aes(x=longitude, y=latitude, color=k490),shape=22, size=0.25, alpha=0.5)+ #select for data actually avilable (remove NAs)
-  scale_color_viridis_c(alpha=0.7, option = "cividis")+
-  geom_sf(data=states)+ #add basemap not good one
-  coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39 ))+ #this is based on extent(r) raster but not UTM projection?
-  geom_point(data=echo_integration_all, aes(x=Lon_M, y=Lat_M), color="black", alpha=0.78)+
-  ggtitle("kd490 2013")+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank(),
-        #panel.grid = element_line(colour = "black", linetype = "solid"),
-        panel.background = element_blank())+
-  facet_wrap("mon_day")
-
-
-```
-
-In this example data from 2013, there appears to be quite a bit of cloud cover (missing values?!) when with daily data? Perhaps this is because of cloud cover, but also could be a result of something I did wrong here? They all look pretty dang similar... so I am thinking there is probably an artifact of my code or prevalence of NAs. If i understand correctly, each day here should be represented by all the cells within that day, but I may need to use data within a week instead. Also ps this is for a single year, and I would need to repeat this export for each year seperately. (I really need to code this instead of relying on erddap gui)
-
-# look at one day seperately
-```{r}
-
-kd490_2013 |> 
-  dplyr::filter(!is.na(k490))
-
-day_514= filter(kd490_2013, mon_day==0514) |> 
-dplyr::filter(!is.na(k490))
-
-#all NaN values
-range(day_514$k490)# all NaN values- cloud cover? 
-
-
-ggplot()+
-  geom_point(data= day_514, aes(x=longitude, y=latitude, color=k490), alpha=0.75)+
-  scale_fill_viridis_c(alpha=0.7)+
-  geom_sf(data=states)+ #add basemap not good one
-  coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39 ))+ #this is based on extent(r) raster but not UTM projection?
-  ggtitle("kd490 2013")+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank(),
-        #panel.grid = element_line(colour = "black", linetype = "solid"),
-        panel.background = element_blank())
-```
-
-ALSO need to check on lat lon values as they are cut off in Monterey Bay... but then again that may just be because that is where we had acoustics data available?
-
-
-It looks like there are quite a few NaN values here. I am not sure how best to deal with this. Either I am doing somethign wrong (which is totally possible) or there was a lot of cloud cover present. If the later, I may need to consider using a weekly composite to capture these data. Maybe I could take a mean of the weekly values for a given grid cell over the period we visited? I am not sure how specific to get to a acoustic track here. If too specific i am not sure how to handle lcoations that we visited with acoustics more than once (ie different dates?) but don't want to accidentally create another proxy that just represents variability between years if I just use annual values? 
-
-
-
-# 1 day composite data
-```{r data info}
-
-#obtain and store dataset info 
-k490_info <- rerddap::info('erdMH1kd4901day') # 1 day composite data
-#datasetid from ERDDAP webpage
-
-k490_info
-```
-# Select subset of dataset-- II NEED TO UPDATE: based on range of values in our output dataset
-For our purpsoses the following lat and long cover the California Current generally (based on input from Jerome, and checking that this includes all of our survey data)
-*Note: can alter time for selecting by stride for specific months (ex. may and june)
-```{r region selection}
-
-range(output$Lat_M) # 36 to 38.4
-range(output$Lon_M) # -125 to -121
-
-#select region of interest:
-latitude= c(36, 39)
-longitude= c(-125, -120)
-#time = c("2013-05-01", "2018-05-01")
-
-```
-### Extract data with rerddap::griddap function- month of May
-NOTE: i need to think about how to extract for a specific range of dates for a given year....
-
-```{r subset}
-
-# Subset data based on time, lat, long as well as variable of interest (fields)
-# select lat and long values for regions that had some acoustics data
-# note: have to do each year seperately because I am not sure how else to change time per year
-
-
-# extracting the data using the griddap function from {rerddap}
-# note this will save the output as a .nc netCDF file
-
-
-# 1 day composite
-k490_2013_day <- rerddap::griddap(k490_info,   # info obtained above using the info() function
-                    latitude= c(36, 39), # whole lat range all acoustics data
-                    longitude= c(-125, -120), # whole lon range all acoustics data 
-                    time = c("2013-05-01", "2013-06-01"), # note: sample years
-                    stride= c(1, 1, 1), # time, lat, long this selects 1 value (May) per year
-                    #fields = 'k490', # want all fields: lat, lon, time and k490
-                    fmt="csv") #output format, default is .nc
-
-# Add a column for month and day-- need to add values so match Day column in echo_integration_all
-k490_2013_day= k490_2013_day |> 
-           mutate(year=lubridate::year(time)) |> 
-           mutate(mon=lubridate::month(time)) |> 
-           mutate(day=lubridate::day(time)) 
-
-
-k490_2013_day$mon= stringr::str_pad(k490_2013_day$mon, 2, side = "left", pad = 0)
-k490_2013_day$day= stringr::str_pad(k490_2013_day$day, 2, side = "left", pad = 0)
-
-k490_2013_day= k490_2013_day |> 
-               mutate(Day=paste0(mon, day))
-
-unique(k490_2013_day$Day) # Range returned some weird values here
-```
-
-AHHHHH I overlaid the acoustics tracks, that is why there was missing data, not because of cloud cover (DUHHHH face palm) going to go back and check individual day composities and 8 day...
-
-
-# plot data-- overlay acoustic tracks??
-```{r}
-
-# plot cover of kd490 data per day 
-ggplot()+
-  geom_point(data= dplyr::filter(k490_2013_day, !is.na(k490)), aes(x=longitude, y=latitude, color=k490),shape=22, size=0.25, alpha=0.5)+ #select for data actually avilable (remove NAs)
-  scale_color_viridis_c(alpha=0.7, option = "cividis")+
-  geom_sf(data=states)+ #add basemap not good one
-  coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39 ))+ #this is based on extent(r) raster but not UTM projection?
-  geom_point(data=echo_integration_all, aes(x=Lon_M, y=Lat_M), color="gray")+
-  ggtitle("kd490 2013")+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank(),
-        #panel.grid = element_line(colour = "black", linetype = "solid"),
-        panel.background = element_blank())+
-  facet_wrap("Day")
-
-ggsave("./plots/k490_day.pdf")
-```
-
-With daily data, there are quite a few gaps in the available data!!! Must be clouds?! 
-
-# Going to re-run but with the 8 day composite
-```{r}
-k490_info <- rerddap::info('erdMH1kd4908day') # 8 day composite data
-
-# 1 day composite
-k490_2013_8day <- rerddap::griddap(k490_info,   # info obtained above using the info() function
-                    latitude= c(36, 39), # whole lat range all acoustics data
-                    longitude= c(-125, -120), # whole lon range all acoustics data 
-                    time = c("2013-05-01", "2013-06-01"), # note: sample years
-                    stride= c(1, 1, 1), # time, lat, long this selects 1 value (May) per year
-                    #fields = 'k490', # want all fields: lat, lon, time and k490
-                    fmt="csv") #output format, default is .nc
-
-# Add a column for month and day-- need to add values so match Day column in echo_integration_all
-k490_2013_8day= k490_2013_8day |> 
-           mutate(year=lubridate::year(time)) |> 
-           mutate(Month=lubridate::month(time)) |> 
-           mutate(day=lubridate::day(time)) 
-
-
-k490_2013_8day$mon= stringr::str_pad(k490_2013_8day$mon, 2, side = "left", pad = 0)
-k490_2013_8day$day= stringr::str_pad(k490_2013_8day$day, 2, side = "left", pad = 0)
-
-k490_2013_8day= k490_2013_8day |> 
-               mutate(Day=paste0(mon, day))
-
-```
-# PLOT 8 day composite data-- for 2013
-Filter for 2013 acoustic data
-
-
-
-```{r}
-# Add month col to acoustic track data from "Day" column
-
-  echo_integration_all$month= stringr::str_extract(echo_integration_all$Day, "^\\d{2}")
-
-
-# plot cover of kd490 data per day 
-ggplot()+
-  geom_point(data= dplyr::filter(k490_2013_8day, !is.na(k490)), aes(x=longitude, y=latitude, color=k490),shape=22, size=0.25, alpha=0.5)+ #select for data actually avilable (remove NAs)
-  scale_color_viridis_c(alpha=0.7, option = "cividis")+
-  geom_sf(data=states)+ #add basemap not good one
-  coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39 ))+ #this is based on extent(r) raster but not UTM projection?
-  geom_point(data=filter(echo_integration_all, year==2013), aes(x=Lon_M, y=Lat_M), color="black")+
-  ggtitle("kd490 2013")+
-  theme(panel.background = element_blank(),
-        axis.text.x = element_text(angle = 90))+
-  facet_wrap("month")
-
-ggsave("./plots/k490_day.pdf")
-```
-# Extract data from specific acosutic track?! (8-day composite)
-I am thinking the easiest way to do this MIIIIGHT be using Roy's code?!
-Roy's guide to using the package
-https://rmendels.github.io/UsingrerddapXtracto.html
-developed to extract data along a track (for tagged animals) perfect use of these data if you ask me! 
-
-data info:
-k490_info <- rerddap::info('erdMH1kd4908day') # 8 day composite data
-
-
-
-# rerddapXtracto: to extract light data for acoustic track (8-day composite)
-
-```{r extract data from acoustic track}
-#load package
-library(rerddapXtracto)
-
-# select rerddap dataset
-k490_info <- rerddap::info('erdMH1kd4908day') # 8 day composite data
-
-# Create a date column that matches desired format year-month-day
-
-echo_integration_all$month= stringr::str_sub(echo_integration_all$Day, "1", "2")
-echo_integration_all$day= stringr::str_sub(echo_integration_all$Day, "3", "4") #start and end pos
-
-# Make a new column that is a date in the format year-month-day
-echo_integration_all= echo_integration_all |> 
-  mutate(time=paste0(year, month, day)) |> 
-  mutate(time=lubridate::ymd(time))
-
-
-# use extracto to extract k490 for our survey data! 
-
-k490_track= rerddapXtracto::rxtracto(dataInfo=k490_info, parameter="k490", xcoord=echo_integration_all$Lon_M, ycoord=echo_integration_all$Lat_M, tcoord = echo_integration_all$time) #xlen = 0.1, ylen=0.1 to increase search area but shifted data only use if need didn't seem to add any data 
-
-# note xlen and ylen set to 0.1 which is search for nearest point 0.1 ~ 11km or at the resolution of 4m a little over 2 cells
-```
-Documentation from https://coastwatch.pfeg.noaa.gov/projects/r/xyt-matchup.html coastwatch:
-Define the search “radius” for the gridded data. The rxtracto function allow you to set the size of the box used to collect data around the track points using the xlen and ylen arguments. The values for xlen and ylen are in degrees. For our example we 0.2 degrees for both arguments. Note: You can also submit vectors for xlen and ylen, as long as the are the same length as xcoord, ycoord, and tcoord
-
-0.1 degrees I believe is about 11km ish which should be the surrounding few cells! 
-
- accessing data from the list output
-```{r}
-k490_track[[1]] #k490 mean
-
-k490= k490_track$`mean k490` #k490 mean
-time=k490_track$`satellite date` # time
-lon=k490_track$`requested lon min` # lon
-lat=k490_track$`requested lat min` # lat not could be either min or max it looks like bc same
-
-k490_track_df= as.data.frame(cbind(k490, time, lon, lat))
-
-# need to make a column for year
-k490_track_df= k490_track_df |> 
-  mutate(year=lubridate::year(time)) 
-
-k490_track_df$year= as.character(k490_track_df$year)
-
-# Convert values to numeric where necessary
-k490_track_df$k490 <- as.numeric(k490_track_df$k490)
-k490_track_df$lon <- as.numeric(k490_track_df$lon)
-k490_track_df$lat <- as.numeric(k490_track_df$lat)
-
-
-# convert time from character to ymd
-# first remove additional information from erddap format
-
-k490_track_df= k490_track_df |> 
-  mutate(time_2= stringr::str_sub(time, "1", "10")) |> 
-  mutate(time=lubridate::ymd(time_2)) |> 
-  select(-time_2)
-
-# filter for no na values
-k490_track_df= k490_track_df |> 
-  filter(!is.na(k490))
-
-
-#check on str of df
-str(k490_track_df)
-class(k490_track_df$time)
-
-
-# finally, convert our kd490 valus from the diffusion corefficient to a 1% light level depth via our function Z
-#function(per, Kd){-log(per)/Kd
-#}
-
-k490_track_df$Z <- Z(per=0.01, Kd=k490_track_df$k490) # 0.01 is 1%
-range(k490_track_df$Z) # note that this range goes from 1.2 to 90 m?!! I would have thought it was much deeper than this, so I may have to think about what this means
-```
-
-
-
-# plot data-- overlay acoustic tracks?? 
-Note that this lines up fairly well, but has a few missing data values for some regions. Hopefully there is still enough data available 
-
-```{r plot of monthly data}
-str(k490_track_df)
-
-# plot cover of kd490 data per day 
-ggplot()+
-  geom_sf(data=states)+ # add a basemap
-  coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39))+ #study region
-  geom_point(data=echo_integration_all, aes(x=Lon_M, y=Lat_M), color="gray")+
-  geom_point(data=k490_track_df, aes(x=lon, y=lat, color=k490))+
-  cmocean::scale_color_cmocean(name="turbid", direction=1)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank(),
-        #panel.grid = element_line(colour = "black", linetype = "solid"),
-        panel.background = element_blank())+
-    facet_wrap(~year)
-
-
-
-# plot 1% light level (based on kd490)
-ggplot()+
-  geom_sf(data=states)+ # add a basemap
-  coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39))+ #study region
-  geom_point(data=echo_integration_all, aes(x=Lon_M, y=Lat_M), color="gray")+
-  geom_point(data=k490_track_df, aes(x=lon, y=lat, color=Z))+
-  cmocean::scale_color_cmocean(name="tempo", direction=1)+
-  scale_x_continuous(breaks = acoustics_regrid$lon_grid_low, minor_breaks = NULL)+ #add 25km gridlines?!
-  scale_y_continuous(breaks=acoustics_regrid$lat_grid_hi, minor_breaks = NULL)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank(),
-        #panel.grid = element_line(colour = "black", linetype = "solid"),
-        panel.background = element_blank())+
-    facet_wrap(~year)
-```
-After all of this.... this is great, however, there is a little bit of acoustics data that is missing some associated light data :( I am not sure why this is missing and whether perhaps it has something due to clouds, or date or some other conditon with the data. I can try to resolve this by attempting to use the monthly data?! Or just assume that at the 25km level we are interested in that these will all be taken as means anywyas?! 
-
-NOTE: I could also select these data for each year seperately using the downloaded version of these data?! 
-
-NOTE: ILY YOU ARE HERE!!! FOR SOME REASON, using a search value of xlen and ylen of 0.1 seems to have shifted our data slights while not really adding additional regions.. perhaps I might use the exact values because at least they corresponded to the track exactly. Otherwise the data seems to be shifted to the left from the actual track....
-
-
-# plot data from rxtracto package
-require("ggplot2")
-require("plotdap")
-install.packages("mapdata")
-require("mapdata")
-
-myPlot <- plotTrack(k490_track, xpos , ypos, tpos, plotColor = 'solar')
-myPlot
-
-# for references, the following are our positions and times that we would like to extract data for
-xpos <- echo_integration_all$Lon_M
-ypos <- echo_integration_all$Lat_M
-tpos <- echo_integration_all$time
-
-SUPER NEAT!!! This actually plotted the k490 data along our acoutic tracks!!! I am not sure what the grey data corresponds to.... is this NA values? maybe
-Miiiight have to convert to df in order to look at range of values... but pretty nifty
-
-
-# NOTE: assuming we consider these data to be complete (which I will have to go back and check!)
-
-# Regrid these depth at which light = 1% values to our grid....
-This is code I am stealing and updating from Ocean regrid.Rmd
-
-# Regrid CTD data - LIGHT 
-```{r satellite derived light data from MODIS satellite}
-
-# check resolution of raster layer : should be 25000 and 25000
-res(r)
-
-# ensure the grids from acosutics_regrid are appropriate for this size (ex. 20km)
-#acoustics_regrid= acoustics_regrid_25km #only do once or will overwrite
-
-
-# FOR LOOP: For each unique year of CTD data (and acoustics)
-yr= unique(k490_track_df$year)
-
-# MANUAL::: create df to store output in
-light <- data.frame() # MANUAL!!!!
-
-for(i in 1:length(yr)){
-  #filter for given year
-  light_yr <- k490_track_df |> 
-             filter(year==yr[i]) #select for one year at a time
-             
-  # convert to sf object
-  light_yr_sf <- sf::st_as_sf(x=light_yr, coords=c('lon','lat'), remove = FALSE, crs=4326) #sf object with lat lon coord system
-  light_yr_sf <- sf::st_transform(light_yr_sf, crs=32610)# Convert to projected coordinate system (UTM Zone 10N, datum: WGS84) to match raster r
+# PER CTD CAST, depth at which light = 1% value at 2m 
+ctd_euphoic_light= ctd_deep_data_core |>
+  select(year, CTD_INDEX, CTD_DEPTH, IRRAD) |> 
+  filter(!is.na(IRRAD)) |> 
+  filter(CTD_DEPTH==2) |> # considering this "surface" conditions
+  mutate(light_2m=IRRAD) |> # light at "surface"
+  mutate(light_1_per_2m=light_2m*0.01) |> # light that is 1% of light at "surface"
+  select(-IRRAD, -CTD_DEPTH)
+
+# Depth at which light is == 1% of 2 m
+# calculate distance from each IRRAD value to each value and then find minimum value
+
+light= ctd_deep_data_core |> 
+  select(year, CTD_INDEX, CTD_DEPTH, IRRAD) |> 
+  filter(!is.na(IRRAD))
   
-  # rasterize our CTD data to our acoustics grid (r) created previously (of distance dist=)
-  x_yr<- raster::rasterize(x=light_yr_sf, y=r, field=light_yr_sf$Z, fun=function(x,...) c(length(x), mean(x, na.rm=TRUE))) #MANUAL 
-  #this returns the mean value at 150m per cell. In those cases where there were only one CTD, this should just be that single value
-  
-# convert raster output to dataframe object
-x_yr_df<- raster::as.data.frame(x=x_yr, xy=TRUE, centroids=TRUE, na.rm=TRUE) 
-x_yr_df <- x_yr_df |> 
-  rename(lon=x, lat=y, count_sat_pts=layer.1, Z=layer.2) |> #rename col names based on their true values: length and identity (value at 150m)
-  mutate(year=yr[i]) #create col for year for when we merge later
-  
-
-# store output to df
-light <- rbind(light, x_yr_df) #MANUAL
-
-}
+# cbind to add euphoic depth value 
+light=left_join(light, ctd_euphoic_light, by=c("year", "CTD_INDEX"))
 
 
-# note this output ctd_temp_cm is in UTM Zone 10N- need to convert back to WGS 84: LAT LON coordinate reference system -- # MANUAL
-light_sf <- st_as_sf(x=light, coords=c('lon','lat'), remove = FALSE, crs=32610) # convert to SF object with UTM Zone 10N
-light_sf <- st_transform(light_sf, crs=4326)# Convert coordinate system from utm zone 10N back to WGS 84 (Lon Lat)
+#filter instead of summarize
+light_min= light |> 
+  filter(!is.na(light_2m)) |> # ensure there was a value for light at 2m >0
+  filter(light_2m>0) |> 
+  group_by(year, CTD_INDEX) |> # for each year and ctd cast
+  filter(dist==min(abs(dist))) # return the row when distance is at a minimum (ie closest value of IRAD to 1% of surface irrad)
 
-# break geometry column into two columns for lon and lat
+# mean "euphotic" depth per year
+light_min_yr=light_min |> 
+  group_by(year) |> 
+  summarise(mean_euphotic_depth=mean(CTD_DEPTH))
 
-  light_sf <- light_sf |> 
-              dplyr::mutate(lon = sf::st_coordinates(light_sf)[,1],
-              lat = sf::st_coordinates(light_sf)[,2]) |> 
-              select(-geometry)
-
-                
-# convert from sf back to  dataframe
-light <- as.data.frame(st_drop_geometry(light_sf))
-
-#remove intermediary dfs
-rm(light_sf) #no longer need this sf since we converted to df
-rm(light_yr, light_yr_sf, x_yr, x_yr_df) #output from for loop
 
 ```
-# Now join our re-gridded light data to our existing oceanographic variables
 
-This code is also stolen from Ocean regrid. Rmd
-```{r}
-# join light to acoustics_ctd data
+# ADD PAR data to our satellite data
 
-acoustics_ctd= left_join(acoustics_regrid, light, by=c("year", "lat", "lon")) #Join density at 150m
-
-rm(light, k490_track_df, k490_2013_8day, k490_track)
-```
-
-# WHOA!!! I now have ALL of my oceanographic variables linked to acoustics data!
-Next step is removing any cells that are missing data entirely.... 
-such as the dynamic height value that was removed when I got rid of the 3rd std dev outliers
+Adding these values to our boxplots 
 
 ```{r}
 
-acoustics_ctd |> 
-  dplyr::filter(is.na(Z))
-# OH NO! there are now 5 additional cells that lack light information :( 
-# but wait... for some reason all of the CTD variables have already been removed?!!! I must have accidentally deleted the previous version of this df wha wha... at least it is possible that in fact that same cells that we are missing ctd data for are the same as those that are lacking light data. That said, if not, then I might have to manually find light data 
+# Calculate median values for CTD data
+ctd_years= light_min |> 
+  group_by(year) |> 
+  summarise(mean_Z=mean(CTD_DEPTH), sd_Z=sd(CTD_DEPTH), median_Z=median(CTD_DEPTH))
 
+ggplot()+ #plot of satellite data, Z (depth at which light= 1% surface irradiance)
+  geom_boxplot(data=k490_track_df, aes(x=year, y=Z))+ # satellite data
+  #geom_boxplot(data=light_min, aes(x=factor(year), y=CTD_DEPTH), color="orange", alpha=0.25)+
+  stat_boxplot(geom="errorbar", width=0.25)+
+  scale_y_reverse()+
+  geom_text(data=k490_years, aes(x=year, y=median_z, label=paste0("Z [m] =",round(median_z, 2))), vjust=2, size=2.5)+
+  geom_point(data=light_min, aes(x=factor(year), y=CTD_DEPTH), color="chocolate", alpha=0.75, size=2)+
+  geom_point(data=ctd_years, aes(x=factor(year), y=mean_Z), size=5, color="chocolate", alpha=0.5)+
+  geom_point(data=ctd_years, aes(x=factor(year), y=median_Z), size=5, color="chocolate", alpha=0.5)+
+  geom_label(data=ctd_years, aes(x=factor(year), y=mean_Z, label=paste0("Mean Z [m] =",round(mean_Z, 2))),  size=2.7, color="chocolate")+
+  geom_label(data=ctd_years, aes(x=factor(year), y=median_Z, label=paste0("Median Z [m] =",round(median_Z, 2))),  size=2.7, color="chocolate")+
+  xlab("Year")+
+  ylab("Z [m]")+
+  ggthemes::theme_few()
 
+ggsave("./plots/par_satellite.pdf")
 ```
 
-II YOU ARE HERE::: 
-Okay, it looks like somehow my acoustics_ctd df was deleted (insert face palm and tears here) but I believe i have all the code i need to add light to our data... 
+# Calculate annual profiles 
+```{r}
+# ANNUAL AVERAGES 
+
+mean_par_profiles= ctd_deep_data_core |> 
+  group_by(year, CTD_DEPTH) |> 
+  summarise(mean_irrad=mean(IRRAD), .groups = "drop") |> 
+  filter(!is.na(mean_irrad))
+
+unique(mean_par_profiles$year)
+
+
+# Calculate depth at which irradiance equals zero?
+mean_par_profiles |> 
+  group_by(year) |> 
+  filter(mean_irrad==0) |> 
+  slice(1) #first record where equals zero 
+
+# calculate depth at which irradiance equals 1% of surface value
 
 
 
-
-
-
-
-
-
-
-# FOR REF
-
-
-# Monthly composite
-```{r data info for month composite}
-
-#obtain and store dataset info 
-k490_info <- rerddap::info('erdMH1kd490mday') 
-#datasetid from ERDDAP webpage
-```
-# Read in monthly composite data from erddap
-```{r select monthly data}
-
-# Subset data based on time, lat, long as well as variable of interest (fields)
-# select lat and long values for regions that had some acoustics data
-# note: have to do each year seperately because I am not sure how else to change time per year
-
-
-# extracting the data using the griddap function from {rerddap}
-# note this will save the output as a .nc netCDF file
-
-# position info
-
-xpos <- echo_integration_all$Lon_M
-ypos <- echo_integration_all$Lat_M
-tpos <- echo_integration_all$time
-
-
-
-# 8 day composite
-k490_2013_monthly <- rerddap::griddap(k490_info,   # info obtained above using the info() function
-                    latitude= c(36, 39), # whole lat range all acoustics data
-                    longitude= c(-125, -120), # whole lon range all acoustics data 
-                    time = c("2013-05-01", "2013-06-01"), # note: sample years
-                    stride= c(1, 1, 1), # time, lat, long this selects 1 value (May) per year
-                    #fields = 'k490', # want all fields: lat, lon, time and k490
-                    fmt="csv") #output format, default is .nc
-
-# Add a column for month and day
-k490_2013_monthly= k490_2013_monthly |> 
-           mutate(month=lubridate::month(time))
-
-unique(k490_2013_monthly$month) # Range returned some weird values here
-#this extracted data for may and june 
+mean_par_profiles$mean_irrad[min(which(mean_par_profiles$mean_irrad==0.00))]
 ```
 
-#CLOUDS+ CLOUD COVER
-The following is simply my interest in cloud cover between years....
-https://coastwatch.pfeg.noaa.gov/erddap/griddap/erdATcldnhday_LonPM180.html
-Dataset ID: erdATcldnhday_LonPM180
-```{r extract data from acoustic track via erddapxtracto}
-#load package
-library(rerddapXtracto)
+# return depth when ligth reaches closest value to 1% of light at 2m 
+light |> 
+  filter(!is.na(light_2m)) |> # ensure we had a value for light at the "surface"
+  group_by(year, CTD_INDEX) |>  #for each year and ctd cast within a year
+  summarise(p=nth(IRRAD, which.min(abs(IRRAD-light_1_per_2m)))) #return the smallest distance from Irradiance value to our targeted irradiance value
 
-# select rerddap dataset
-cloud_info <- rerddap::info('erdATcldnhday_LonPM180') # 8 day composite data
 
-# Create a date column that matches desired format year-month-day
 
-echo_integration_all$month= stringr::str_sub(echo_integration_all$Day, "1", "2")
-echo_integration_all$day= stringr::str_sub(echo_integration_all$Day, "3", "4") #start and end pos
 
-# Make a new column that is a date in the format year-month-day
-echo_integration_all= echo_integration_all |> 
-  mutate(time=paste0(year, month, day)) |> 
-  mutate(time=lubridate::ymd(time))
 
-# use extracto to extract k490 for our survey data! 
-
-cloud_track= rerddapXtracto::rxtracto(dataInfo=cloud_info, parameter="cloudmask", xcoord=echo_integration_all$Lon_M, ycoord=echo_integration_all$Lat_M, tcoord = echo_integration_all$time, zcoord = ) #xlen = 0.1, ylen=0.1 to increase search area but shifted data only use if need didn't seem to add any data 
-
-# note xlen and ylen set to 0.1 which is search for nearest point 0.1 ~ 11km or at the resolution of 4m a little over 2 cells
-```
+# PLOT mean profile 
  
- # Clean up output and convert to dataframe-- calculate Z from k490
 ```{r}
-#k490_track[[1]] #k490 mean values 
 
-k490= k490_track$`mean k490` #k490 mean
-time=k490_track$`satellite date` # time
-lon=k490_track$`requested lon min` # lon
-lat=k490_track$`requested lat min` # lat not could be either min or max it looks like bc same
-
-k490_track_df= as.data.frame(cbind(k490, time, lon, lat))
-rm(k490, time, lon, lat)
-
-# need to make a column for year
-k490_track_df= k490_track_df |> 
-  mutate(year=lubridate::year(time)) 
-
-k490_track_df$year= as.character(k490_track_df$year) # convert to character to match acoustics_ctd df 
-
-# Convert values to numeric where necessary
-k490_track_df$k490 <- as.numeric(k490_track_df$k490)
-k490_track_df$lon <- as.numeric(k490_track_df$lon)
-k490_track_df$lat <- as.numeric(k490_track_df$lat)
-
-
-# convert time from character to ymd
-# first remove additional information from erddap format
-
-k490_track_df= k490_track_df |> 
-  mutate(time_2= stringr::str_sub(time, "1", "10")) |> 
-  mutate(time=lubridate::ymd(time_2)) |> 
-  select(-time_2)
-
-# filter for no na values
-k490_track_df= k490_track_df |> 
-  filter(!is.na(k490))
-
-
-#check on str of df
-str(k490_track_df)
-class(k490_track_df$time)
-
-
-# finally, convert our kd490 valus from the diffusion corefficient to a 1% light level depth via our function Z
-#function(per, Kd){-log(per)/Kd
-#}
-
-k490_track_df$Z <- Z(per=0.01, Kd=k490_track_df$k490) # 0.01 is 1%
-range(k490_track_df$Z) # note that this range goes from 1.2 to 90 m?!! I would have thought it was much deeper than this, so I may have to think about what this means
-```
-
-# PLOT DATA-- Plot of light levels overlaid acoustic track data 
-
-Note that this lines up fairly well, but has a few missing data values for some regions. Hopefully there is still enough data available 
-
-```{r plot of 8day composite data}
-str(k490_track_df)
-
-# plot cover of kd490 data per day 
 ggplot()+
-  geom_sf(data=states)+ # add a basemap
-  coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39))+ #study region
-  geom_point(data=echo_integration_all, aes(x=Lon_M, y=Lat_M), color="gray")+
-  geom_point(data=k490_track_df, aes(x=lon, y=lat, color=k490))+
-  cmocean::scale_color_cmocean(name="turbid", direction=1)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank(),
-        #panel.grid = element_line(colour = "black", linetype = "solid"),
-        panel.background = element_blank())+
-    facet_wrap(~year)
+    geom_line(data=mean_par_profiles, aes(y=CTD_DEPTH, x= mean_irrad), color="grey", linewidth=1.5, orientation="y")+ #line
+    geom_point(data=mean_par_profiles, aes(y=CTD_DEPTH, x= mean_irrad), color="sienna3", size=2, alpha=0.4)+ #plot individual points above
+  geom_text(data=mean_par_profiles, aes(y=CTD_DEPTH, x=mean_irrad, label=round(mean_irrad, 2)), hjust=-1, size=2)+
+    scale_y_reverse(expand=c(0,0), limits=c(100,0))+ #remove extra space so plots begin at the surface
+    xlab("par")+
+    ylab("Depth (m)")+
+    ggtitle("Mean profile of PAR")+ # create a title for CTD station year and CTD cast
+  geom_vline(xintercept = 0, linetype="dashed", color="darkgrey")+ #simple line demarking mesopelagic depths
+  theme(panel.grid.major=element_blank(), 
+        panel.grid.minor=element_blank(), 
+        panel.background = element_blank(),
+        panel.border = element_rect(colour="black", fill=NA, linewidth =2),
+        legend.key = element_rect(fill=NA))+
+  facet_wrap(~year)
 
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -8,10 +8,9 @@ the following code extracts CTD data for each re-gridded acoustic data cell (25k
 
 # CTD variables:
 I am interested in re-gridding the following CTD data:
-- Temperature (150m, 500m, CM depth)
-- Salinity (150m, 500m, CM depth)
-- Oxygen (150m, 500m, CM depth)
-- Density (150m, 500m, CM depth)
+- Temperature (175m, 500m)
+- Oxygen (175m, 500m)
+- Density (175m, 500m)
 - Chl-a (upper 100m integrated) sum
 - Dyn-height (at 500m, anomaly)
 
@@ -22,9 +21,9 @@ and calculating
 # Calculate the mean CM depth
 
 ```{r mean cm 25km cells}
-mean(acoustics_regrid_25km$cm_m) #313.73m which we can round to the nearest 2m bin == 314m
+mean(acoustics_regrid_25km$cm_m) #322 (rounded to nearest 2m depth bin 322.66)
 
-range(acoustics_regrid_25km$cm_m) # 204m--411m pretty narrow range
+range(acoustics_regrid_25km$cm_m) # 230 m--411 m pretty narrow range
 
 # Mean CM per year
 acoustics_regrid_25km |> 
@@ -34,12 +33,12 @@ acoustics_regrid_25km |>
 
 # REGRID CTD DATA
 
-# Regrid CTD data - TEMPERATURE at 150m
+# Regrid CTD data - TEMPERATURE at 175 m
 IMPORTANT NOTE: I am using the SAME grid developed for our acoustics data (with removed filter for # of cells per column of water). As such, the raster grid input "r" depends on the input to Regrid.Rmd, so ensure you have the correct grid cell size prior to running the following code!!! 
 
 Prior to running, I ensured that our cell size was 25 km in Regrid.Rmd df (raster object= r)
-# Regrid CTD data - TEMPERATURE at 150m 
-```{r CTD: temperature at 150m}
+# Regrid CTD data - TEMPERATURE at 175 m 
+```{r CTD: temperature at 175m}
 
 # check resolution of raster layer : should be 25000 and 25000
 res(r)
@@ -49,16 +48,16 @@ acoustics_regrid= acoustics_regrid_25km
 
 
 # FOR LOOP: For each unique year of CTD data (and acoustics)
-yr= unique(ctd_deep_data_core$Year)
+yr= unique(ctd_deep_data_core$year)
 
 # MANUAL::: create df to store output in
-ctd_temp_150m <- data.frame() # MANUAL!!!!
+ctd_temp_175m <- data.frame() # MANUAL!!!!
 
 for(i in 1:length(yr)){
   #filter for given year
   ctd_yr <- ctd_deep_data_core |> 
-             filter(Year==yr[i]) |> #select for one year at a time
-             filter(CTD_DEPTH==150) #MANUAL::: select for depths of interest, 150m, 500m, and CM depth
+             filter(year==yr[i]) |> #select for one year at a time
+             filter(CTD_DEPTH==175) #MANUAL::: select for depths of interest, 150m, 500m, and CM depth
   
   # convert to sf object
   ctd_yr_sf <- st_as_sf(x=ctd_yr, coords=c('LONGITUDE','LATITUDE'), remove = FALSE, crs=4326) #sf object with lat lon coord system
@@ -71,7 +70,7 @@ for(i in 1:length(yr)){
 # convert raster output to dataframe object
 x_yr_df<- raster::as.data.frame(x=x_yr, xy=TRUE, centroids=TRUE, na.rm=TRUE) 
 x_yr_df <- x_yr_df |> 
-  rename(lon=x, lat=y, count_ctds=layer.1, temp_150m=layer.2) |> #rename col names based on their true values: length and identity (value at 150m)
+  rename(lon=x, lat=y, count_ctds=layer.1, temp_175m=layer.2) |> #rename col names based on their true values: length and identity (value at 150m)
   mutate(year=yr[i]) #create col for year for when we merge later
   
 
@@ -80,93 +79,31 @@ x_yr_df <- x_yr_df |>
 
 
 # store output to df
-ctd_temp_150m <- rbind(ctd_temp_150m, x_yr_df)
+ctd_temp_175m <- rbind(ctd_temp_175m, x_yr_df)
 
 }
 
 
 # note this output ctd_temp_150m is in UTM Zone 10N- need to convert back to WGS 84: LAT LON coordinate reference system
-ctd_temp_150m_sf <- st_as_sf(x=ctd_temp_150m, coords=c('lon','lat'), remove = FALSE, crs=32610) # convert to SF object with UTM Zone 10N
-ctd_temp_150m_sf <- st_transform(ctd_temp_150m_sf, crs=4326)# Convert coordinate system from utm zone 10N back to WGS 84 (Lon Lat)
+ctd_temp_175m_sf <- st_as_sf(x=ctd_temp_175m, coords=c('lon','lat'), remove = FALSE, crs=32610) # convert to SF object with UTM Zone 10N
+ctd_temp_175m_sf <- st_transform(ctd_temp_175m_sf, crs=4326)# Convert coordinate system from utm zone 10N back to WGS 84 (Lon Lat)
 
 # break geometry column into two columns for lon and lat
-ctd_temp_150m_sf <- ctd_temp_150m_sf  |> 
-              dplyr::mutate(lon = sf::st_coordinates(ctd_temp_150m_sf)[,1], # extract lon from geometry col
-              lat = sf::st_coordinates(ctd_temp_150m_sf)[,2]) |>  #extract lat from geometry col
+ctd_temp_175m_sf <- ctd_temp_175m_sf  |> 
+              dplyr::mutate(lon = sf::st_coordinates(ctd_temp_175m_sf)[,1], # extract lon from geometry col
+              lat = sf::st_coordinates(ctd_temp_175m_sf)[,2]) |>  #extract lat from geometry col
               dplyr::select(-geometry)
 
 
 # convert from sf back to  dataframe
-ctd_temp_150m <- as.data.frame(st_drop_geometry(ctd_temp_150m_sf))
+ctd_temp_175m <- as.data.frame(st_drop_geometry(ctd_temp_175m_sf))
 
 #remove intermediary dfs
-rm(ctd_temp_150m_sf) #no longer need this sf since we converted to df
+rm(ctd_temp_175m_sf) #no longer need this sf since we converted to df
 rm(ctd_yr, ctd_yr_sf, x_yr, x_yr_df) #output from for loop
 
 ```
 
-# Regrid CTD data - TEMPERATURE at 314m (CM)
-```{r CTD: temperature at CM depth 314 m}
-
-# check resolution of raster layer : should be 25000 and 25000
-res(r)
-
-# ensure the grids from acosutics_regrid are appropriate for this size (ex. 20km)
-acoustics_regrid= acoustics_regrid_25km
-
-
-# FOR LOOP: For each unique year of CTD data (and acoustics)
-yr= unique(ctd_deep_data_core$Year)
-
-# MANUAL::: create df to store output in
-ctd_temp_cm <- data.frame() # MANUAL!!!!
-
-for(i in 1:length(yr)){
-  #filter for given year
-  ctd_yr <- ctd_deep_data_core |> 
-             filter(Year==yr[i]) |> #select for one year at a time
-             filter(CTD_DEPTH==314) #MANUAL::: select for depths of interest, 150m, 500m, and CM depth
-  
-  # convert to sf object
-  ctd_yr_sf <- st_as_sf(x=ctd_yr, coords=c('LONGITUDE','LATITUDE'), remove = FALSE, crs=4326) #sf object with lat lon coord system
-  ctd_yr_sf <- st_transform(ctd_yr_sf, crs=32610)# Convert to projected coordinate system (UTM Zone 10N, datum: WGS84) to match raster r
-  
-  # rasterize our CTD data to our acoustics grid (r) created previously (of distance dist=)
-  x_yr<- raster::rasterize(x=ctd_yr_sf, y=r, field=ctd_yr_sf$TEMPERATURE, fun=function(x,...) c(length(x), mean(x, na.rm=TRUE))) #MANUAL 
-  #this returns the mean value at 150m per cell. In those cases where there were only one CTD, this should just be that single value
-  
-# convert raster output to dataframe object
-x_yr_df<- raster::as.data.frame(x=x_yr, xy=TRUE, centroids=TRUE, na.rm=TRUE) 
-x_yr_df <- x_yr_df |> 
-  rename(lon=x, lat=y, count_ctds=layer.1, temp_cm=layer.2) |> #rename col names based on their true values: length and identity (value at 150m)
-  mutate(year=yr[i]) #create col for year for when we merge later
-  
-
-# store output to df
-ctd_temp_cm <- rbind(ctd_temp_cm, x_yr_df) #MANUAL
-
-}
-
-
-# note this output ctd_temp_cm is in UTM Zone 10N- need to convert back to WGS 84: LAT LON coordinate reference system -- # MANUAL
-ctd_temp_cm_sf <- st_as_sf(x=ctd_temp_cm, coords=c('lon','lat'), remove = FALSE, crs=32610) # convert to SF object with UTM Zone 10N
-ctd_temp_cm_sf <- st_transform(ctd_temp_cm_sf, crs=4326)# Convert coordinate system from utm zone 10N back to WGS 84 (Lon Lat)
-
-# break geometry column into two columns for lon and lat
-ctd_temp_cm_sf <- ctd_temp_cm_sf |> 
-                      dplyr::mutate(lon = sf::st_coordinates(ctd_temp_cm_sf)[,1], # extract lon from geometry col
-              lat = sf::st_coordinates(ctd_temp_cm_sf)[,2]) |>  #extract lat from geometry col
-              dplyr::select(-geometry)
-
-
-# convert from sf back to  dataframe
-ctd_temp_cm <- as.data.frame(st_drop_geometry(ctd_temp_cm_sf))
-
-#remove intermediary dfs
-rm(ctd_temp_cm_sf) #no longer need this sf since we converted to df
-rm(ctd_yr, ctd_yr_sf, x_yr, x_yr_df) #output from for loop
-
-```
 # Regrid CTD data - TEMPERATURE at 500m
 At a 25km resolution, mean temperature at 500m
 ```{r CTD: temperature at 500m}
@@ -179,7 +116,7 @@ acoustics_regrid= acoustics_regrid_25km
 
 
 # FOR LOOP: For each unique year of CTD data (and acoustics)
-yr= unique(ctd_deep_data_core$Year)
+yr= unique(ctd_deep_data_core$year)
 
 # MANUAL::: create df to store output in
 ctd_temp_500m <- data.frame() # MANUAL!!!!
@@ -187,7 +124,7 @@ ctd_temp_500m <- data.frame() # MANUAL!!!!
 for(i in 1:length(yr)){
   #filter for given year
   ctd_yr <- ctd_deep_data_core |> 
-             filter(Year==yr[i]) |> #select for one year at a time
+             filter(year==yr[i]) |> #select for one year at a time
              filter(CTD_DEPTH==500) #MANUAL::: select for depths of interest, 150m, 500m, and CM depth
   
   # convert to sf object
@@ -243,7 +180,7 @@ acoustics_regrid= acoustics_regrid_25km
 
 
 # FOR LOOP: For each unique year of CTD data (and acoustics)
-yr= unique(ctd_deep_data_core$Year)
+yr= unique(ctd_deep_data_core$year)
 
 # MANUAL::: create df to store output in
 ctd_temp_10m <- data.frame() # MANUAL!!!!
@@ -251,7 +188,7 @@ ctd_temp_10m <- data.frame() # MANUAL!!!!
 for(i in 1:length(yr)){
   #filter for given year
   ctd_yr <- ctd_deep_data_core |> 
-             filter(Year==yr[i]) |> #select for one year at a time
+             filter(year==yr[i]) |> #select for one year at a time
              filter(CTD_DEPTH<=10) #MANUAL::: select for depths of interest, upper 10m and will take mean per grid cell
   
   # convert to sf object
@@ -301,9 +238,9 @@ ctd_temp_10m= ctd_temp_10m |>
 ```
 
 
-# Regrid CTD data - OXYGEN at 150m
+# Regrid CTD data - OXYGEN at 175m
 25km by 25km grid cell 
-```{r CTD: oxygen at 150m}
+```{r CTD: oxygen at 175 m}
 
 # check resolution of raster layer 
 res(r)
@@ -313,16 +250,16 @@ acoustics_regrid= acoustics_regrid_25km
 
 
 # FOR LOOP: For each unique year of CTD data (and acoustics)
-yr= unique(ctd_deep_data_core$Year)
+yr= unique(ctd_deep_data_core$year)
 
 # MANUAL::: create df to store output in
-ctd_o2_150m <- data.frame() # MANUAL!!!!
+ctd_o2_175m <- data.frame() # MANUAL!!!!
 
 for(i in 1:length(yr)){
   #filter for given year
   ctd_yr <- ctd_deep_data_core |> 
-             filter(Year==yr[i]) |> #select for one year at a time
-             filter(CTD_DEPTH==150) #MANUAL::: select for depths of interest, 150m, 500m, and CM depth
+             filter(year==yr[i]) |> #select for one year at a time
+             filter(CTD_DEPTH==175) #MANUAL::: select for depths of interest, 175m, 500m, and CM depth
   
   # convert to sf object
   ctd_yr_sf <- st_as_sf(x=ctd_yr, coords=c('LONGITUDE','LATITUDE'), remove = FALSE, crs=4326) #sf object with lat lon coord system
@@ -335,98 +272,33 @@ for(i in 1:length(yr)){
 # convert raster output to dataframe object
 x_yr_df<- raster::as.data.frame(x=x_yr, xy=TRUE, centroids=TRUE, na.rm=TRUE) 
 x_yr_df <- x_yr_df |> 
-  rename(lon=x, lat=y, count_ctds=layer.1, o2_150m=layer.2) |> #rename col names based on their true values: length and identity (value at 150m)
+  rename(lon=x, lat=y, count_ctds=layer.1, o2_175m=layer.2) |> #rename col names based on their true values: length and identity (value at 175m)
   mutate(year=yr[i]) #create col for year for when we merge later
   
 
 
 # store output to df
-ctd_o2_150m <- rbind(ctd_o2_150m, x_yr_df)
+ctd_o2_175m <- rbind(ctd_o2_175m, x_yr_df)
 
 }
 
 
-# note this output ctd_temp_150m is in UTM Zone 10N- need to convert back to WGS 84: LAT LON coordinate reference system
-ctd_o2_150m_sf <- st_as_sf(x=ctd_o2_150m, coords=c('lon','lat'), remove = FALSE, crs=32610) # convert to SF object with UTM Zone 10N
-ctd_o2_150m_sf <- st_transform(ctd_o2_150m_sf, crs=4326)# Convert coordinate system from utm zone 10N back to WGS 84 (Lon Lat)
+# note this output ctd_temp_175m is in UTM Zone 10N- need to convert back to WGS 84: LAT LON coordinate reference system
+ctd_o2_175m_sf <- st_as_sf(x=ctd_o2_175m, coords=c('lon','lat'), remove = FALSE, crs=32610) # convert to SF object with UTM Zone 10N
+ctd_o2_175m_sf <- st_transform(ctd_o2_175m_sf, crs=4326)# Convert coordinate system from utm zone 10N back to WGS 84 (Lon Lat)
 
 # break geometry column into two columns for lon and lat
-ctd_o2_150m_sf <- ctd_o2_150m_sf |> 
-                      dplyr::mutate(lon = sf::st_coordinates(ctd_o2_150m_sf)[,1], # extract lon from geometry col
-                      lat = sf::st_coordinates(ctd_o2_150m_sf)[,2]) |>  #extract lat from geometry col
+ctd_o2_175m_sf <- ctd_o2_175m_sf |> 
+                      dplyr::mutate(lon = sf::st_coordinates(ctd_o2_175m_sf)[,1], # extract lon from geometry col
+                      lat = sf::st_coordinates(ctd_o2_175m_sf)[,2]) |>  #extract lat from geometry col
                       dplyr::select(-geometry)
 
 
 # convert from sf back to  dataframe
-ctd_o2_150m <- as.data.frame(st_drop_geometry(ctd_o2_150m_sf))
+ctd_o2_175m <- as.data.frame(st_drop_geometry(ctd_o2_175m_sf))
 
 #remove intermediary dfs
-rm(ctd_o2_150m_sf) #no longer need this sf since we converted to df
-rm(ctd_yr, ctd_yr_sf, x_yr, x_yr_df) #output from for loop
-
-```
-
-# Regrid CTD data - OXYGEN at 314m (CM)
-25km by 25km grid cell 
-```{r CTD: oxygen at 314m}
-
-# check resolution of raster layer 
-res(r)
-
-# ensure the grids from acosutics_regrid are apprpriate for this size (ex. 20km)
-acoustics_regrid= acoustics_regrid_25km
-
-
-# FOR LOOP: For each unique year of CTD data (and acoustics)
-yr= unique(ctd_deep_data_core$Year)
-
-# MANUAL::: create df to store output in
-ctd_o2_cm <- data.frame() # MANUAL!!!!
-
-for(i in 1:length(yr)){
-  #filter for given year
-  ctd_yr <- ctd_deep_data_core |> 
-             filter(Year==yr[i]) |> #select for one year at a time
-             filter(CTD_DEPTH==314) #MANUAL::: select for depths of interest, 150m, 500m, and CM depth (314m)
-  
-  # convert to sf object
-  ctd_yr_sf <- st_as_sf(x=ctd_yr, coords=c('LONGITUDE','LATITUDE'), remove = FALSE, crs=4326) #sf object with lat lon coord system
-  ctd_yr_sf <- st_transform(ctd_yr_sf, crs=32610)# Convert to projected coordinate system (UTM Zone 10N, datum: WGS84) to match raster r
-  
-  # rasterize our CTD data to our acoustics grid (r) created previously (of distance dist=)
-  x_yr<- raster::rasterize(x=ctd_yr_sf, y=r, field=ctd_yr_sf$OXYGEN, fun=function(x,...) c(length(x), mean(x, na.rm=TRUE))) #MANUAL 
-  #this returns the mean value at 314m per cell. In those cases where there were only one CTD, this should just be that single value
-  
-# convert raster output to dataframe object- MANUAL
-x_yr_df<- raster::as.data.frame(x=x_yr, xy=TRUE, centroids=TRUE, na.rm=TRUE) 
-x_yr_df <- x_yr_df |> 
-  rename(lon=x, lat=y, count_ctds=layer.1, o2_cm=layer.2) |> #rename col names based on their true values: length and identity (value at 150m)
-  mutate(year=yr[i]) #create col for year for when we merge later
-  
-
-
-# store output to df
-ctd_o2_cm <- rbind(ctd_o2_cm, x_yr_df)
-
-}
-
-
-# note this output ctd_temp_cm is in UTM Zone 10N- need to convert back to WGS 84: LAT LON coordinate reference system
-ctd_o2_cm_sf <- st_as_sf(x=ctd_o2_cm, coords=c('lon','lat'), remove = FALSE, crs=32610) # convert to SF object with UTM Zone 10N
-ctd_o2_cm_sf <- st_transform(ctd_o2_cm_sf, crs=4326)# Convert coordinate system from utm zone 10N back to WGS 84 (Lon Lat)
-
-# break geometry column into two columns for lon and lat
-ctd_o2_cm_sf <- ctd_o2_cm_sf |> 
-                      dplyr::mutate(lon = sf::st_coordinates(ctd_o2_cm_sf)[,1], # extract lon from geometry col
-                      lat = sf::st_coordinates(ctd_o2_cm_sf)[,2]) |>  #extract lat from geometry col
-                      dplyr::select(-geometry)
-
-
-# convert from sf back to  dataframe
-ctd_o2_cm <- as.data.frame(st_drop_geometry(ctd_o2_cm_sf))
-
-#remove intermediary dfs
-rm(ctd_o2_cm_sf) #no longer need this sf since we converted to df
+rm(ctd_o2_175m_sf) #no longer need this sf since we converted to df
 rm(ctd_yr, ctd_yr_sf, x_yr, x_yr_df) #output from for loop
 
 ```
@@ -443,7 +315,7 @@ acoustics_regrid= acoustics_regrid_25km
 
 
 # FOR LOOP: For each unique year of CTD data (and acoustics)
-yr= unique(ctd_deep_data_core$Year)
+yr= unique(ctd_deep_data_core$year)
 
 # MANUAL::: create df to store output in
 ctd_o2_500m <- data.frame() # MANUAL!!!!
@@ -451,7 +323,7 @@ ctd_o2_500m <- data.frame() # MANUAL!!!!
 for(i in 1:length(yr)){
   #filter for given year
   ctd_yr <- ctd_deep_data_core |> 
-             filter(Year==yr[i]) |> #select for one year at a time
+             filter(year==yr[i]) |> #select for one year at a time
              filter(CTD_DEPTH==500) #MANUAL::: select for depths of interest, 150m, 500m, and CM depth
   
   # convert to sf object
@@ -498,10 +370,10 @@ rm(ctd_yr, ctd_yr_sf, x_yr, x_yr_df) #output from for loop
 
 
 
-# Regrid CTD data - DENSITY at 150m
+# Regrid CTD data - DENSITY at 175 m
 25km by 25km grid cell 
 
-```{r CTD: density at 150m}
+```{r CTD: density at 175m}
 
 # check resolution of raster layer 
 res(r)
@@ -511,16 +383,16 @@ acoustics_regrid= acoustics_regrid_25km
 
 
 # FOR LOOP: For each unique year of CTD data (and acoustics)
-yr= unique(ctd_deep_data_core$Year)
+yr= unique(ctd_deep_data_core$year)
 
 # MANUAL::: create df to store output in
-ctd_den_150m <- data.frame() # MANUAL!!!!
+ctd_den_175m <- data.frame() # MANUAL!!!!
 
 for(i in 1:length(yr)){
   #filter for given year
   ctd_yr <- ctd_deep_data_core |> 
-             filter(Year==yr[i]) |> #select for one year at a time
-             filter(CTD_DEPTH==150) #MANUAL::: select for depths of interest, 150m, 500m, and CM depth
+             filter(year==yr[i]) |> #select for one year at a time
+             filter(CTD_DEPTH==175) #MANUAL::: select for depths of interest, 175m, 500m, and CM depth
   
   # convert to sf object
   ctd_yr_sf <- st_as_sf(x=ctd_yr, coords=c('LONGITUDE','LATITUDE'), remove = FALSE, crs=4326) #sf object with lat lon coord system
@@ -533,99 +405,33 @@ for(i in 1:length(yr)){
 # convert raster output to dataframe object
 x_yr_df<- raster::as.data.frame(x=x_yr, xy=TRUE, centroids=TRUE, na.rm=TRUE) 
 x_yr_df <- x_yr_df |> 
-  rename(lon=x, lat=y, count_ctds=layer.1, den_150m=layer.2) |> #rename col names based on their true values: length and identity (value at 150m)
+  rename(lon=x, lat=y, count_ctds=layer.1, den_175m=layer.2) |> #rename col names based on their true values: length and identity (value at 150m)
   mutate(year=yr[i]) #create col for year for when we merge later
   
 
 
 # store output to df
-ctd_den_150m <- rbind(ctd_den_150m, x_yr_df)
+ctd_den_175m <- rbind(ctd_den_175m, x_yr_df)
 
 }
 
 
 # note this output ctd_temp_150m is in UTM Zone 10N- need to convert back to WGS 84: LAT LON coordinate reference system
-ctd_den_150m_sf <- st_as_sf(x=ctd_den_150m, coords=c('lon','lat'), remove = FALSE, crs=32610) # convert to SF object with UTM Zone 10N
-ctd_den_150m_sf <- st_transform(ctd_den_150m_sf, crs=4326)# Convert coordinate system from utm zone 10N back to WGS 84 (Lon Lat)
+ctd_den_175m_sf <- st_as_sf(x=ctd_den_175m, coords=c('lon','lat'), remove = FALSE, crs=32610) # convert to SF object with UTM Zone 10N
+ctd_den_175m_sf <- st_transform(ctd_den_175m_sf, crs=4326)# Convert coordinate system from utm zone 10N back to WGS 84 (Lon Lat)
 
 # break geometry column into two columns for lon and lat
-ctd_den_150m_sf <- ctd_den_150m_sf |> 
-                  dplyr::mutate(lon = sf::st_coordinates(ctd_den_150m_sf)[,1], # extract lon from geometry col
-                  lat = sf::st_coordinates(ctd_den_150m_sf)[,2]) |>  #extract lat from geometry col
+ctd_den_175m_sf <- ctd_den_175m_sf |> 
+                  dplyr::mutate(lon = sf::st_coordinates(ctd_den_175m_sf)[,1], # extract lon from geometry col
+                  lat = sf::st_coordinates(ctd_den_175m_sf)[,2]) |>  #extract lat from geometry col
                   dplyr::select(-geometry)
 
 
 # convert from sf back to  dataframe
-ctd_den_150m <- as.data.frame(st_drop_geometry(ctd_den_150m_sf))
+ctd_den_175m <- as.data.frame(st_drop_geometry(ctd_den_175m_sf))
 
 #remove intermediary dfs
-rm(ctd_den_150m_sf) #no longer need this sf since we converted to df
-rm(ctd_yr, ctd_yr_sf, x_yr, x_yr_df) #output from for loop
-
-```
-
-# Regrid CTD data - DENSITY at cm (314 m)
-25km by 25km grid cell 
-
-```{r CTD: density at cm 314 m}
-
-# check resolution of raster layer 
-res(r)
-
-# ensure the grids from acosutics_regrid are apprpriate for this size (ex. 20km)
-acoustics_regrid= acoustics_regrid_25km
-
-
-# FOR LOOP: For each unique year of CTD data (and acoustics)
-yr= unique(ctd_deep_data_core$Year)
-
-# MANUAL::: create df to store output in
-ctd_den_cm <- data.frame() # MANUAL!!!!
-
-for(i in 1:length(yr)){
-  #filter for given year
-  ctd_yr <- ctd_deep_data_core |> 
-             filter(Year==yr[i]) |> #select for one year at a time
-             filter(CTD_DEPTH==314) #MANUAL::: select for depths of interest, 150m, 500m, and CM depth
-  
-  # convert to sf object
-  ctd_yr_sf <- st_as_sf(x=ctd_yr, coords=c('LONGITUDE','LATITUDE'), remove = FALSE, crs=4326) #sf object with lat lon coord system
-  ctd_yr_sf <- st_transform(ctd_yr_sf, crs=32610)# Convert to projected coordinate system (UTM Zone 10N, datum: WGS84) to match raster r
-  
-  # rasterize our CTD data to our acoustics grid (r) created previously (of distance dist=)
-  x_yr<- raster::rasterize(x=ctd_yr_sf, y=r, field=ctd_yr_sf$DENSITY, fun=function(x,...) c(length(x), mean(x, na.rm=TRUE))) #MANUAL 
-  #this returns the mean value at 150m per cell. In those cases where there were only one CTD, this should just be that single value
-  
-# convert raster output to dataframe object
-x_yr_df<- raster::as.data.frame(x=x_yr, xy=TRUE, centroids=TRUE, na.rm=TRUE) 
-x_yr_df <- x_yr_df |> 
-  rename(lon=x, lat=y, count_ctds=layer.1, den_cm=layer.2) |> #rename col names based on their true values: length and identity (value at 150m)
-  mutate(year=yr[i]) #create col for year for when we merge later
-  
-
-
-# store output to df
-ctd_den_cm <- rbind(ctd_den_cm, x_yr_df)
-
-}
-
-
-# note this output ctd_temp_150m is in UTM Zone 10N- need to convert back to WGS 84: LAT LON coordinate reference system
-ctd_den_cm_sf <- st_as_sf(x=ctd_den_cm, coords=c('lon','lat'), remove = FALSE, crs=32610) # convert to SF object with UTM Zone 10N
-ctd_den_cm_sf <- st_transform(ctd_den_cm_sf, crs=4326)# Convert coordinate system from utm zone 10N back to WGS 84 (Lon Lat)
-
-# break geometry column into two columns for lon and lat
-ctd_den_cm_sf <- ctd_den_cm_sf |> 
-                  dplyr::mutate(lon = sf::st_coordinates(ctd_den_cm_sf)[,1], # extract lon from geometry col
-                  lat = sf::st_coordinates(ctd_den_cm_sf)[,2]) |>  #extract lat from geometry col
-                  dplyr::select(-geometry)
-
-
-# convert from sf back to  dataframe
-ctd_den_cm <- as.data.frame(st_drop_geometry(ctd_den_cm_sf))
-
-#remove intermediary dfs
-rm(ctd_den_cm_sf) #no longer need this sf since we converted to df
+rm(ctd_den_175m_sf) #no longer need this sf since we converted to df
 rm(ctd_yr, ctd_yr_sf, x_yr, x_yr_df) #output from for loop
 
 ```
@@ -644,7 +450,7 @@ acoustics_regrid= acoustics_regrid_25km
 
 
 # FOR LOOP: For each unique year of CTD data (and acoustics)
-yr= unique(ctd_deep_data_core$Year)
+yr= unique(ctd_deep_data_core$year)
 
 # MANUAL::: create df to store output in
 ctd_den_500m <- data.frame() # MANUAL!!!!
@@ -652,7 +458,7 @@ ctd_den_500m <- data.frame() # MANUAL!!!!
 for(i in 1:length(yr)){
   #filter for given year
   ctd_yr <- ctd_deep_data_core |> 
-             filter(Year==yr[i]) |> #select for one year at a time
+             filter(year==yr[i]) |> #select for one year at a time
              filter(CTD_DEPTH==500) #MANUAL::: select for depths of interest, 150m, 500m, and CM depth
   
   # convert to sf object
@@ -712,7 +518,7 @@ acoustics_regrid= acoustics_regrid_25km
 
 
 # FOR LOOP: For each unique year of CTD data (and acoustics)
-yr=unique(ctd_deep_data_core$Year)
+yr=unique(ctd_deep_data_core$year)
 
 # MANUAL::: create df to store output in
 ctd_chl_100m <- data.frame() # MANUAL!!!!
@@ -720,7 +526,7 @@ ctd_chl_100m <- data.frame() # MANUAL!!!!
 for(i in 1:length(yr)){
   #filter for given year
   ctd_yr <- ctd_deep_data_core |> 
-             filter(Year==yr[i]) |> #select for one year at a time
+             filter(year==yr[i]) |> #select for one year at a time
              filter(CTD_DEPTH<= 100) #MANUAL::: select for depth of interest
   
   # convert to sf object
@@ -783,7 +589,7 @@ range(dyn_ht_500$DYN_HGT) # range of 0.69 to 2.48 (quite a difference actually)
 
 ctd_deep_data_core |> 
 filter(CTD_DEPTH==500) |> 
-group_by(Year) |> 
+group_by(year) |> 
 summarise(dy_ht=mean(DYN_HGT), .groups = 'drop')
 
 #rm(dyn_ht_500)
@@ -816,7 +622,7 @@ ggplot(data=dyn_ht_500) +
 # or as a boxplot
 ggplot(dyn_ht_500,aes(x=factor(0),y=DYN_HGT))+
 geom_boxplot()+
-  geom_text(aes(x=factor(0), y=DYN_HGT, label=paste0(CTD_INDEX, ",  ", Year)))+
+  geom_text(aes(x=factor(0), y=DYN_HGT, label=paste0(CTD_INDEX, ",  ", year)))+
   geom_hline(yintercept=mean(dyn_ht_500$DYN_HGT)+3*sd(dyn_ht_500$DYN_HGT), color="red")+
   geom_hline(yintercept=mean(dyn_ht_500$DYN_HGT)-3*sd(dyn_ht_500$DYN_HGT), color="red")
 
@@ -824,8 +630,8 @@ geom_boxplot()+
 
 # REMOVE outliers of dynamic height
 dyn_ht_500= dyn_ht_500 |> 
- dplyr::filter(!(Year==2017 & CTD_INDEX==28)) |> 
-  dplyr::filter(!(Year==2016 & CTD_INDEX==184))
+ dplyr::filter(!(year==2017 & CTD_INDEX==28)) |> 
+  dplyr::filter(!(year==2016 & CTD_INDEX==184))
 
 ```
 
@@ -847,7 +653,7 @@ acoustics_regrid= acoustics_regrid_25km
 
 
 # FOR LOOP: For each unique year of CTD data (and acoustics)
-yr= unique(ctd_deep_data_core$Year)
+yr= unique(ctd_deep_data_core$year)
 
 # MANUAL::: create df to store output in
 ctd_dyn_ht_500m <- data.frame() # MANUAL!!!!
@@ -855,9 +661,9 @@ ctd_dyn_ht_500m <- data.frame() # MANUAL!!!!
 for(i in 1:length(yr)){
   #filter for given year
   ctd_yr <- ctd_deep_data_core |> 
-             dplyr::filter(!(Year==2017 & CTD_INDEX==28)) |> # remove outliers
-             dplyr::filter(!(Year==2016 & CTD_INDEX==184)) |>  #remove outliers
-             filter(Year==yr[i]) |> #select for one year at a time
+             dplyr::filter(!(year==2017 & CTD_INDEX==28)) |> # remove outliers
+             dplyr::filter(!(year==2016 & CTD_INDEX==184)) |>  #remove outliers
+             filter(year==yr[i]) |> #select for one year at a time
              filter(CTD_DEPTH==500) #MANUAL::: select for depths of interest, 150m, 500m, and CM depth
              
   
@@ -910,14 +716,13 @@ CTD data from 150m, 500m and center of mass (CM) 314m depth
 Would like to join this CTD data to existing regrided acoustics data (acoustics_regrid)
 
 ctd_chl_100m
-ctd_den_150m
+ctd_den_175m
 ctd_den_500m
-ctd_den_cm
 ctd_dyn_ht_500m
-ctd_o2_150m
+ctd_o2_175m
 ctd_o2_500m
 ctd_o2_cm
-ctd_temp_150m
+ctd_temp_175m
 ctd_temp_500m
 ctd_temp_cm
 
@@ -929,25 +734,24 @@ acoustics_regrid$year <- as.numeric(acoustics_regrid$year)
 
 
 
-acoustics_ctd= left_join(acoustics_regrid, ctd_temp_150m, by=c("year", "lat", "lon")) #temp at 150m
-
+acoustics_ctd= left_join(acoustics_regrid, ctd_temp_175m, by=c("year", "lat", "lon")) #temp at 175m
 
 acoustics_ctd= left_join(acoustics_ctd, dplyr::select(ctd_chl_100m, year, lon, lat, chl_100m), by=c("year", "lat", "lon")) #Join density at 150m
-acoustics_ctd= left_join(acoustics_ctd, dplyr::select(ctd_den_150m, year, lon, lat, den_150m), by=c("year", "lat", "lon")) #Den at 150m
+acoustics_ctd= left_join(acoustics_ctd, dplyr::select(ctd_den_175m, year, lon, lat, den_175m), by=c("year", "lat", "lon")) #Den at 150m
 acoustics_ctd= left_join(acoustics_ctd, dplyr::select(ctd_den_500m, year, lon, lat, den_500m), by=c("year", "lat", "lon")) #Den at 500m
-acoustics_ctd= left_join(acoustics_ctd, dplyr::select(ctd_den_cm, year, lon, lat, den_cm), by=c("year", "lat", "lon")) #Den at cm 314m
 acoustics_ctd= left_join(acoustics_ctd, dplyr::select(ctd_dyn_ht_500m, year, lon, lat, dyn_ht_500m), by=c("year", "lat", "lon")) #dyn ht anom at 500m
-acoustics_ctd= left_join(acoustics_ctd, dplyr::select(ctd_o2_150m, year, lon, lat, o2_150m), by=c("year", "lat", "lon")) #oxygen at 150m
+acoustics_ctd= left_join(acoustics_ctd, dplyr::select(ctd_o2_175m, year, lon, lat, o2_175m), by=c("year", "lat", "lon")) #oxygen at 150m
 acoustics_ctd= left_join(acoustics_ctd, dplyr::select(ctd_o2_500m, year, lon, lat, o2_500m), by=c("year", "lat", "lon")) #oxygen at 500m
-acoustics_ctd= left_join(acoustics_ctd, dplyr::select(ctd_o2_cm, year, lon, lat, o2_cm), by=c("year", "lat", "lon")) #oxygen at cm 314m
 acoustics_ctd= left_join(acoustics_ctd, dplyr::select(ctd_temp_500m, year, lon, lat, temp_500m), by=c("year", "lat", "lon")) #temp at 500m
-acoustics_ctd= left_join(acoustics_ctd, dplyr::select(ctd_temp_cm, year, lon, lat, temp_cm), by=c("year", "lat", "lon")) #temp at cm 314m
+#acoustics_ctd= left_join(acoustics_ctd, dplyr::select(ctd_temp_10m, year, lon, lat, temp_10m), by=c("year", "lat", "lon")) #temp at >10m
+#acoustics_ctd= left_join(acoustics_ctd, dplyr::select(ctd_temp_cm, year, lon, lat, temp_cm), by=c("year", "lat", "lon")) #temp at mean cm depth 322 m
+#acoustics_ctd= left_join(acoustics_ctd, dplyr::select(ctd_temp_200m, year, lon, lat, temp_200m), by=c("year", "lat", "lon")) #temp 200m
+#acoustics_ctd= left_join(acoustics_ctd, dplyr::select(ctd_o2_200m, year, lon, lat, o2_200m), by=c("year", "lat", "lon")) #oxygen 200m
+# 122 grid cells
 
-# 135 grid cells
-
-# Remove those cells that have acoustics data but no assoicated CTD data...
+# Remove those cells that have acoustics data but no associated CTD data...
 acoustics_ctd= acoustics_ctd |> 
-               filter(!is.na(temp_150m))
+               filter(!is.na(temp_175m))
 # thisis a total of 92 rows (or cells with acoustics and ctd data).. however, there is ONE more oceanographic variable (dynamic height anomaly) missing a value (boooo!) so we have to remove one additional cell (for a total of 91)
 acoustics_ctd= acoustics_ctd |> 
                filter(!is.na(dyn_ht_500m))
@@ -956,16 +760,13 @@ acoustics_ctd= acoustics_ctd |>
 
 
 # clean up intermediary files
-rm(ctd_chl_100m, ctd_den_150m, ctd_den_500m, ctd_den_cm, ctd_dyn_ht_500m, ctd_o2_150m, ctd_o2_500m, ctd_o2_cm, ctd_temp_150m, ctd_temp_500m, ctd_temp_cm)
+rm(ctd_chl_100m, ctd_den_175m, ctd_den_500m, ctd_dyn_ht_500m, ctd_o2_175m, ctd_o2_500m, ctd_temp_175m, ctd_temp_500m)
 
 ```
 
 
 # NEXT
 move to satellite.Rmd to add satellite derived light data to our df of oceanic and acoustic data acoustics_ctd
-
-
-
 
 
 

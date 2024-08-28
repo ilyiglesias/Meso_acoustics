@@ -4,13 +4,13 @@ output: html_notebook
 ---
 
 # Objective of code
-Analysis 1: Are there differences in acosutically detected biomass and CM between years?! 
+Analysis 1: Are there differences in acosutically detected center of mass depth between years?! 
 
 # Background: 
-The following code analyzes whether there were any differences in the biomass and center of mass depth (m) BETWEEN years in our study. We are interested in inter annual differences AND at varying cell sizes (sensitivity analysis)
+The following code analyzes whether there were any differences in acoustic backscatter and center of mass depth (m) BETWEEN years in our study. We are interested in inter annual differences AND at varying cell sizes (sensitivity analysis for different regridding sizes)
 
 NOTE: 
-- analysis part 1 (this document): Comparing differences in biomass and Center of mass depth between years (and diff spatial scales of regridding)
+- analysis part 1 (this document): Comparing differences in Center of mass depth between years (and diff spatial scales of regridding)
 - analysis part 2 (Analysis 2.Rmd): which oceanographic variables are likely driving the center of mass depth of the DSL at a regridded distance of 25km
 
 
@@ -25,7 +25,7 @@ library(ggthemes) # simplification of themes for ggplotting
 ```
 
 # Which re-grid size are you working on?!! MANUAL step
-I regridded by 1km, 5km, 10km, 15km, 20km (from fine-resolution, 100m data originally output)
+Sensitivity analysis: 1km, 5km, 10km, 15km, 20km (from fine-resolution, 100m data originally output)
 Need to manually set the dataset here (df are differentiated by grid size as acoustics_regrid_15km for ex) so the following code will all run on the same input 
 ```{r manually set the grid size we are working with }
 
@@ -36,7 +36,7 @@ grid_size="25km" #MANUAL step
 
 ```
 
-### MINIMUM number of 100m grid cells to trust in larger grid size
+### MINIMUM number of 100m grid cells required for larger grid size
 There are some instances where our re-gridded cell (of whichever scale) were based on 1 or few 100m horizontal cells. Since we are extrapolating these values over a large region, select those cells with at least a minimum of 3 100m fine-resolution cells covering a larger grid cell
 
 ```{r}
@@ -80,10 +80,10 @@ need to adjust the shape size depending on grid size ~4 is a nice size for 25km
 # MANUAL: change the size in geom_point to fit grid cell size :)
 ggplot()+
   geom_sf(data=states, fill="grey", color="black")+# plot state basemap
-  geom_point(data = acoustic_regrid, aes(x= lon, y=lat, fill=MVBS), color="black", stroke=0, size=5.2, shape=22 )+ #plot regridded data
-  geom_text(data=acoustic_regrid, aes(x=lon, y=lat, label=echo_count), size=2)+ #label # of 100m cells per re-grid cell
+  geom_point(data = acoustic_regrid, aes(x= lon, y=lat, fill=cm_m), stroke=0, size=7.1, shape=22 )+ #plot regridded data
+  #geom_text(data=acoustic_regrid, aes(x=lon, y=lat, label=echo_count), size=2)+ #label # of 100m cells per re-grid cell
   geom_point(data=echo_integration_all, aes(x=Lon_M, y=Lat_M), size=0.01, color="grey", alpha=0.9)+ #overlay of cruise track over regridded data
-  scale_fill_viridis_c(option = "D", direction=1)+ #color output via viridis
+  scale_fill_viridis_c(option = "D", direction=-1)+ #color output via viridis
   coord_sf(xlim = c(min(acoustic_regrid$lon-0.25), max(acoustic_regrid$lon+0.25)), ylim = c(min(acoustic_regrid$lat-0.25), max(acoustic_regrid$lat+0.25)))+ 
   scale_x_continuous(breaks = lon, minor_breaks = NULL)+
   scale_y_continuous(breaks=lat, minor_breaks = NULL)+
@@ -98,8 +98,8 @@ ggplot()+
 #Save plot
 ggsave(filename=paste0("./plots/analysis 1/regrid_coverage_", grid_size, "_map.pdf"))
 ```
-25km: size=5.2
-
+25km: size=7.1
+20km: size= 5.2
 # Calculate median values for plotting 
 se=s/sqrt(n) where s= sample standard deviation and n=sample size. in our case, our units here are the # of grid cells per year
 ```{r}
@@ -163,6 +163,8 @@ ggplot(data=acoustic_regrid, aes(x=year, y=cm_m, color=year))+
 # save plot to plots folder
 ggsave(filename=paste0("./plots/analysis 1/boxplot_cm_", grid_size, ".pdf"), width=7, height=5, units="in")
 ```
+
+
 # PLOT: Distribution of MVBS between years
 NOTE:using colors from Okabe & Ito (2008) 
 ```{r}
@@ -190,19 +192,21 @@ Great little plot depicting the differences in the distribution of MVBS between 
 ```{r}
 # using binned output (25x25km)
 
+
+# using binned output (25x25km)
 ggplot(data = acoustic_regrid, aes(x=cm_m, colour=year))+
+  #geom_histogram(aes(y=..density..),color="grey", fill="transparent", binwidth = 50)+ #this is plotting properly for some reason
   geom_density(alpha=0.2, fill="NA", linewidth=1)+ #plot density curves
-  scale_color_manual(values = c("2013"="#009E73" , "2014"= "#56B4E9", "2015"="#E69F00", "2016"="#D55E00" , "2017"= "#0072B2", "2018"= "#999999"))+
-  scale_x_continuous(expand=c(0,0), breaks = round(seq(min(acoustic_regrid$cm_m)-4, max(acoustic_regrid$cm_m)+1, by=25), 0))+ #move plot to axis
+  scale_color_manual(values = c("2013"="#009E73", "2014"="#56B4E9", "2015"="#E69F00", "2016"="#D55E00", "2017"="#0072B2", "2018"="#CC79A7"))+
+  scale_x_reverse(expand=c(0,0))+ #move plot to axis
   scale_y_continuous(expand = c(0,0))+
   xlab("Center of mass (m) ")+
-  ylab("Density")+
-  labs(color="Year")+
-  theme_classic()+
-  theme(axis.text.x = element_text(size=10),
-        axis.text.y = element_text(size=10))
+  coord_flip()+
+  theme_classic()
+  
 
-ggsave(paste0("./plots/analysis 1/cm_bw_years_", grid_size, ".pdf"))
+ggsave(paste0("./plots/analysis 1/cm_bw_years_", grid_size, ".pdf"), width=85, units="mm")
+
 ```
 
 # Combined plot
@@ -371,7 +375,7 @@ format(kw_mc_cm$p.value, scientific = FALSE)
 
 # Data for compact letter display (cld) via {rcompanion} to complete output table and {multcompView} for creating the CLD
 compact lettering display
-Compact letter display allows us to appropraitely color signifiant differences in our data
+Compact letter display allows us color significant differences in our data
 ```{r}
 
 #Take our p.value output from Pairwise.Wilcoxon.Text (ie mutliple comparisons for kruskall wallis)
@@ -434,7 +438,8 @@ clrs= unique(summary_year$cld_mvbs)
 clrs #run this to see what the output is for a given grid size
 clrs = c(
 "a" = "#0072B2",
-"b" = "#E69F00"
+"b" = "#E69F00",
+"c" = "#CC79A7"
 )
 # manually set some color-blind friendly colors and manually update labels depending on unique combinations
 
@@ -446,7 +451,7 @@ ggplot(data=acoustic_regrid, aes(x=year, y=MVBS))+
   geom_text(data= summary_year, aes(x = year, y = median_MVBS, label = paste0("MVBS: ", median_MVBS)), size = 2.8, vjust = -0.5)+ #label median 
   geom_text(data= summary_year, aes(x = year, y = median_MVBS, label = paste0("n: ", no_grid_cells)), size = 2.5, vjust = 1.5, color="black")+ #n
   geom_point(data = summary_year, aes(x = year, y = quantile_mvbs+1, label = cld_mvbs, color=cld_mvbs), size=6, alpha=1, show.legend = FALSE)+ # label cld
-  geom_text(data = summary_year, aes(x = year, y = quantile_mvbs, label = cld_mvbs), vjust=-2.2, color="black")+ # label significance cl adjust position
+  geom_text(data = summary_year, aes(x = year, y = quantile_mvbs, label = cld_mvbs), vjust=-1.8, color="black")+ # label significance cl adjust position
   scale_color_manual(values=clrs)+ #use manual color palette defined above 
   xlab("Year")+
   ylab("MVBS (dB)")+
@@ -454,9 +459,11 @@ ggplot(data=acoustic_regrid, aes(x=year, y=MVBS))+
   ggthemes::theme_few()
 
 
-ggsave(filename=paste0("./plots/analysis 1/boxplot_kw_mc_mvbs_jitter_", grid_size, "_.pdf"), width=7, height=5, units="in")
+ggsave(filename=paste0("./plots/analysis 1/boxplot_kw_mc_mvbs_jitter_", grid_size, "_.pdf"), width=170, height=119, units="mm")
 
 ```
+
+
 Play around with the position of letters and circles, they shift with each cell size (eye roll)
 Also vary when exported
 25km: vjust= -2.2
@@ -507,12 +514,13 @@ clrs # run this to see unique output per grid size
 clrs = c(
 "a" = "#009E73",
 "b" = "#56B4E9",
-"c" = "#E69F00"
+"c" = "#E69F00",
+"ab"= "#CC79A7"
 )
 
 # manually set some color-blind freindly colors and manually update labels depending on unique combinations
 
-# simple box plot of MVBS values- multiple comparison results from KW 
+# simple box plot of CM values- multiple comparison results from KW 
 ggplot(data=acoustic_regrid, aes(x=year, y=cm_m, color=year))+
   stat_boxplot(geom="errorbar", width=0.25)+
   geom_boxplot(data=acoustic_regrid, aes(x=year, y=cm_m), outlier.shape=NA)+ #plot boxplots without outliers since in jitter
@@ -521,7 +529,7 @@ ggplot(data=acoustic_regrid, aes(x=year, y=cm_m, color=year))+
   geom_text(data= summary_year, aes(x = year, y = median_CM, label = paste0("CM: ", median_CM)), size = 2.8, vjust = -0.5, color="black")+ #label median 
   geom_text(data= summary_year, aes(x = year, y = median_CM, label = paste0("n: ", no_grid_cells)), size = 2.5, vjust = 1.5, color="black")+ #n
   geom_point(data = summary_year, aes(x = year, y = quantile_cm+10, label = cld_cm, color=cld_cm), size=6, alpha=1)+ # label cld
-  geom_text(data = summary_year, aes(x = year, y = quantile_cm, label = cld_cm), vjust=1.8, color="black")+ # label significance cld
+  geom_text(data = summary_year, aes(x = year, y = quantile_cm, label = cld_cm), vjust=2.2, color="black")+ # label significance cld
   scale_color_manual(values=clrs)+ #use manual color palette defined above 
   scale_y_reverse()+
   xlab("Year")+
@@ -529,7 +537,7 @@ ggplot(data=acoustic_regrid, aes(x=year, y=cm_m, color=year))+
   ggthemes::theme_few()+
   theme(legend.position = 'none')
   
-ggsave(filename=paste0("./plots/analysis 1/boxplot_kw_mc_cm_jitter_", grid_size, "_.pdf"), width=7, height=5, units="in", bg="transparent")
+ggsave(filename=paste0("./plots/analysis 1/boxplot_kw_mc_cm_jitter_", grid_size, "_.pdf"), width=170, height=119, units="mm", bg="transparent")
 
 ```
 25km: vjust= 2.1
@@ -574,7 +582,7 @@ ggsave(filename=paste0("./plots/analysis 1/boxplot_kw_mc_cm_transparent", grid_s
 ```
 
 
-# Now re-run for each of the additional grid cell sizes
+# For sensitivity analysis, re-run for each of the additional grid cell sizes
 1km, 5km, 10km, 15km, 20km, 25km
 
 # When complete, move to Ocean data.Rmd (for extracting ocean data), then satellite.Rmd (satellite light data), Ocean regrid.Rmd (regridding ocean data)

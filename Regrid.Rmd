@@ -4,14 +4,14 @@ output: html_notebook
 ---
 
 # Objective of code:
-Regrid our acoustics data from continuous tracks (gridded in echoview to 100 m horizontal by 5 m vertical grid cells) to spatialy independent grid cell size (25 km)
+Regrid our acoustics data from continuous tracks (gridded in echoview to 100 m horizontal by 5 m vertical grid cells) to spatially independent grid cell size (25 km)
 
 # Background: 
-Because our data were collected continuously while underway at sea, and because marine organisms are often grouped in space and time according to ecological drivers, there is some spatial autocorrelation present in our data. This poses a challenge in subsequent statistical analysis, as our samples may not be considered independent (which violates the assumptions of most statistical tests).
+Because our data were collected continuously while underway at sea, and because marine organisms are often grouped in space and time according to ecological drivers, there is some spatial autocorrelation present in our data. This poses a challenge in subsequent statistical analysis, as our samples may not be considered independent (a violates of assumptions).
 
-In Spatial autocorrelation.Rmd we created correlograms with our mesopelagic depth integrated values (echo_integration df) of 100m horizontal cells (<10 missing vertical cells) and found mean spatial independence at approximately ~25km.
+In Spatial autocorrelation.Rmd we created correlograms with our mesopelagic depth integrated values (echo_integration) of 100m horizontal cells (<25 missing vertical cells) and found mean spatial independence at approximately ~25km.
 
-From the spatial autocorrelation analysis, a grid size of 25km would be appropriate for acoustic track data (in other words, at 25km, we should no longer have strong spatial autocorrelation in our data and our observations should represent a spatially independent sample). If we re-grid on this scale, we should no longer be in violation of the assumptions of independence in our samples and can proceed with our statistical analysis. 
+From the spatial autocorrelation analysis, a grid size of 25km would be appropriate for acoustic track data (in other words, at 25km, we should no longer have strong spatial autocorrelation in our data and our observations should represent a spatially independent sample).  
 
 # Load libraries
 ```{r load packages}
@@ -20,13 +20,14 @@ library(raster) # regridding
 library(tidyverse)#data wrangle and plotting
 ```
 
-A note on geographic coordinate systems: in order to create a spatial grid of a specific distance value (for ex. 5km), I can either keep my inputs in latitude longitude and try to convert our distances into degrees latitude and longitude, OR, convert from Lat Long geographic coordinate system into a projected coordinate system, create a grid of known size (for example UTM Zone 19N for the core region of California, in meters), and then re-export in degrees latitude longitude. Here we opt for the latter since the conversion was more precisce. 
+A note on geographic coordinate systems: in order to create a spatial grid of a specific distance value (for ex. 5km), I can either keep my inputs in latitude longitude and try to convert our distances into degrees latitude and longitude, OR, convert from Lat Long geographic coordinate system into a projected coordinate system, create a grid of known size (for example UTM Zone 19N for the core region of California, in meters), and then re-export in degrees latitude longitude. Here we opt for the latter since the conversion was more precise. 
 
 # Add columns to output df for calculating acoustic metrics
 Because we are using the df: output which is our raw 100m by 5m vertical grid data output from echoview, we need to calculate acoustic metrics from these data (instead of calculating the mean of means). To calculate the MVBS we need the linear mean of Sv (sv) (so convert from Sv (log scale) to sv (linear) and take mean and then re-convert) using the following conversions:
-
-Sv to sv: Sv_to_sv <- function(Sv){10^(sv/10)}
-sv to Sv: sv_to_Sv <- function(sv){10*log10(sv)}
+#Sv to sv: 
+  Sv_to_sv <- function(Sv){10^(sv/10)}
+#sv to Sv: 
+  sv_to_Sv <- function(sv){10*log10(sv)}
 
 # Add columns for calculating acoustic metrics
 We only want to run this code at the outset of analysis, no need to run for each grid cell size, so added eval=FALSE
@@ -39,7 +40,7 @@ output <- output |>
           mutate(sv_cellht=MVBS_linear*5) #create additional column for sv * cell height (for calculating NASC)
 
 ```
-NOTE: because we are now calculating these acoustic metrics over a much bigger region (instead of individual 100m column of water, 1km, 5km etc) I am no longer going to select for those columns with less than 10 cells missing 
+NOTE: because we are now calculating these acoustic metrics over a much bigger region (instead of individual 100m column of water, 1km, 5km etc) I am no longer going to select for those columns with less than 25 cells missing. However, we will check that there were at least 3, 100 m cells present (and count the total number of vertical cells as <25 missing) 
 
 # Create grid based on acoustic data extent (specific grid size) 
 
@@ -68,13 +69,13 @@ res(r) <- c(dist, dist) # The units of UTM Zone 10N are meters (m) so 25km is 25
 # create df to store output
 acoustics_regrid_utm <- data.frame()
 
-yr= unique(output$Year)
+yr= unique(output$year)
 
 for(i in 1:length(yr)){
   #filter for given year
   echo_yr <- output_sf |> 
-             filter(Year==yr[i]) |> 
-             filter(Layer_depth_min>=150 & Layer_depth_max<=525) #select for meso depths
+             filter(year==yr[i]) |> 
+             filter(Layer_depth_min>=175 & Layer_depth_max<=675) #select for meso depths
 
   
 # rasterize acoustic output (sv mean) to our grid created above with resolution set by (dist=) input
@@ -233,7 +234,7 @@ Also a good check on grid export consistency- should have same centroid values b
 ```{r CM : sum of sv}
 
 # FOR LOOP: generate CM output - try to calculate at same time?
-yr= unique(output$Year)
+yr= unique(output$year)
 #yr=2013
 
 # create df to store output in
@@ -242,8 +243,8 @@ sv_sum <- data.frame()
 for(i in 1:length(yr)){
   #filter for given year
   echo_yr <- output |> 
-             filter(Year==yr[i]) |> #select for one year at a time
-             filter(Layer_depth_min>=150 & Layer_depth_max<=525) #select for meso depths
+             filter(year==yr[i]) |> #select for one year at a time
+             filter(Layer_depth_min>=175 & Layer_depth_max<=675) #select for meso depths
   
   # convert to sf object
   echo_yr_sf <- st_as_sf(x=echo_yr, coords=c('Lon_M','Lat_M'), remove = FALSE, crs=4326) #sf object with lat lon coord system
@@ -289,7 +290,7 @@ This is the sum of the product of sv * mean depth per cell
 
 
 # FOR LOOP: generate CM output - try to calculate at same time?
-yr= unique(output$Year)
+yr= unique(output$year)
 #yr=2013
 
 # create df to store output in
@@ -298,8 +299,8 @@ sv_z_sum <- data.frame()
 for(i in 1:length(yr)){
   #filter for given year
   echo_yr <- output |> 
-             filter(Year==yr[i]) |> #select for one year at a time
-             filter(Layer_depth_min>=150 & Layer_depth_max<=525) #select for meso depths
+             filter(year==yr[i]) |> #select for one year at a time
+             filter(Layer_depth_min>=175 & Layer_depth_max<=675) #select for meso depths
   
   # convert to sf object- convert coordinate system
   echo_yr_sf <- st_as_sf(x=echo_yr, coords=c('Lon_M','Lat_M'), remove = FALSE, crs=4326)# convert to sf object in native coordsystem WGS84
@@ -360,77 +361,6 @@ acoustics_regrid <- left_join(acoustics_regrid, cm, by=c("lat", "lon", "year"))
 
 rm(cm, sv_z_sum, sv_sum) #remove intermediary dfs
 ```
-# Calculate NASC from vertical 5m binned data for regridded cells- calculate two ways as a check-- Just for ref
-
-1. sum of NASC in output df and 2. sv*cell height summed multiplied by 4*pi(1852^2)
-using the new column we calculated for sv_cellht (which is SV converted to sv (linear: MVBS_linear) multiplied by our cell height of 5m)
-
-```{r NASC method 1 sum of nasc}
-# create df to store output
-NASC_output <- data.frame()
-
-# select for a specific year
-
-yr= unique(output$Year) # for each year of the survey...
-
-for(i in 1:length(yr)){
-  #filter for given year
-  echo_yr <- output |> 
-             filter(Year==yr[i]) |> 
-             filter(Layer_depth_min>=150 & Layer_depth_max<=525) #meso depths since this is all output 
-  
-  # convert to sf object
-  echo_yr_sf <- st_as_sf(x=echo_yr, coords=c('Lon_M','Lat_M'), remove = FALSE, crs=4326)
-  echo_yr_sf <- st_transform(echo_yr_sf, crs=32610)# Convert to projected coordinate system (UTM Zone 10N, datum: WGS84) to match raster r
-  
-  # rasterize this vector again our general grid create above- note raster same as other previous values
-  x_yr<- raster::rasterize(x=echo_yr_sf, y=r, field=echo_yr_sf$NASC, fun=function(x, ...) sum(x)) #calculate sum of NASC per cell
-
-# convert raster output to dataframe object
-x_yr_df<- raster::as.data.frame(x=x_yr, xy=TRUE, centroids=TRUE, na.rm=TRUE) 
-x_yr_df <- x_yr_df |> 
-  rename(lon=x, lat=y, NASC=layer) |>  #rename col names
-  mutate(year=yr[i]) #create a col for yr
-
-# store output in df
-
-NASC_output <- rbind(NASC_output, x_yr_df)
-
-
-
-}
-
-
-# note this output sv_z_sum is in UTM Zone 10N- convert back to WGS 84: LAT LON coordinate reference system
-NASC_output_sf <- st_as_sf(x=NASC_output, coords=c('lon','lat'), remove = FALSE, crs=32610) # convert to SF object with UTM Zone 10N
-NASC_output_sf <- st_transform(NASC_output_sf, crs=4326) # Convert coordinate system back to WGS 84 (Lon Lat)
-
-# break geometry column into two columns for lon and lat
-NASC_output_sf <- NASC_output_sf %>%
-                      mutate(lon = unlist(map(NASC_output_sf$geometry,1)), #create col for longitude from old proj
-                      lat = unlist(map(NASC_output_sf$geometry,2))) #col for latitude from old col of projected lat
-
-
-# convert from sf back to  dataframe
-NASC_output <- as.data.frame(st_drop_geometry(NASC_output_sf))
-
-#remove intermediary dfs
-rm(echo_yr, echo_yr_sf, x_yr, x_yr_df, NASC_output_sf)
-```
-
-# ADD NASC to our existing output
-Add NASC to exisitng datframe acoustics_regrid df
-
-```{r}
-
-# Add CM to our gridded MVBS and cell grid dataframe "acoustics_regrid"
-
-acoustics_regrid <- left_join(acoustics_regrid, NASC_output, by=c("lat", "lon", "year"))
-
-rm(NASC_output) #remove intermediary dfs
-```
-
-NOTE: when we calculate NASC we aren't taking into account that there are some missing cells. For this reason I prefer to use MVBS as our acoustic metric
 
 # Finally, calculate the total number of 100m horiztonal columns of water per grid cell.....
 
@@ -520,10 +450,7 @@ Note basemap data stored in parent folder "Basemaps" so need to change working d
 # state layer from US Census bureau
 # https://www.census.gov/geo/maps-data/data/cbf/cbf_state.html
 
-getwd() # current working directory /Acoustics_Analysis
-setwd('..') # change wd to all of our available data stored in parent folder EV_output (folder: basemaps)
-
-states<- st_read(dsn = "./Basemaps/cb_2017_us_state_20m/cb_2017_us_state_20m.shp") # load the shape file with {sf}
+states<- st_read(dsn = "./cb_2017_us_state_20m/cb_2017_us_state_20m.shp") # load the shape file with {sf}
  # note that these data are stored in our wd
 states= st_transform(states, crs= 4326) # transform the data from NAD 83 to WGS 84
 st_crs(states) # check that coordinates were transformed
@@ -562,8 +489,8 @@ ggplot()+
 ```{r}
 # plot in ggplot (using gridlines set up for generalized raster with ALL years)
 ggplot(data=acoustics_regrid)+
-  geom_point(aes(x=lon, y=lat, fill=MVBS), size=4.5, shape=22)+
-  scale_fill_viridis_c()+
+  geom_point(aes(x=lon, y=lat, fill=cm_m), size=4.5, shape=22)+
+  scale_fill_viridis_c(direction=-1)+
   geom_sf(data=states)+ #add basemap not good one
   coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39 ))+ #this is based on extent(r) raster 
   scale_x_continuous(breaks = acoustics_regrid$lon_grid_low, minor_breaks = NULL)+
@@ -592,11 +519,15 @@ NOTE: for 25km, the total number of 25 by 25km cells is pretty similar: 23, 23, 
 (although this doesn't include an additional filter for those 25km cells with less than 3 100m cells.)
 
 # compare amount of data between cells?
+NOTE for those cells with <10 total horizontal cells, I checked to ensure that there was >75% vertical coverage (ie if 10 horizontal cells, ~1000 vertical cells (100 per horizontal), to ensure not substantial vetical data)
+  filter(total_horizontal<=10)
 ```{r}
 # calculate number of filled grid cells per 
 acoustics_regrid |> 
   group_by(year, cell) |> 
-  summarise(total_vertical=sum(count), total_horizontal=sum(echo_count), total_cells=n(), .groups="drop")
+  summarise(total_vertical=sum(count), total_horizontal=sum(echo_count), total_cells=n(), .groups="drop") 
+
+
 ```
 
 
@@ -624,7 +555,7 @@ NOTE: use the specific acoustics_regrid_size df to plot accurately
 ```{r}
 # plot in ggplot (using gridlines set up for generalized raster with ALL years)
 ggplot(data=acoustics_regrid)+
-  geom_point(aes(x=lon, y=lat, fill=MVBS), size=3, shape=22)+
+  geom_point(aes(x=lon, y=lat, fill=cm_m), size=3, shape=22)+
   scale_fill_viridis_c()+
   geom_sf(data=states)+ #add basemap not good one
   coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39 ))+ #this is based on extent(r) raster 

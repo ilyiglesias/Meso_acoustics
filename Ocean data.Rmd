@@ -36,7 +36,7 @@ ggplot()+
         axis.text.x = element_text(angle=90))+ #remove grey around symbols in legend
   labs(x="Longitude", y="Latitude", fill = "Sv from RREA survey")+ #legend
   guides(fill = guide_colorbar(reverse=T))+ # reverse continuous variable legend so deeper at bottom
-  facet_wrap(~Year)
+  facet_wrap(~year)
 
 ggsave("./plots/mvbs_acoustic_track.pdf")
 ```
@@ -54,12 +54,13 @@ ggplot()+
         axis.text.x = element_text(angle=90))+ #remove grey around symbols in legend
   labs(x="Longitude", y="Latitude", fill = "Sv from RREA survey")+ #legend
   guides(fill = guide_colorbar(reverse=T))+ # reverse continuous variable legend so deeper at bottom
-  facet_wrap(~Year)
+  facet_wrap(~year)
 
 ggsave("./plots/cm_acoustic_track.pdf")
 ```
-# Load CTD data from RREA survey into R  
 
+# Load CTD data from RREA survey into R  
+These data are currently stored in the folder ctd_data
 ```{r load CTD files}
 
 # Read ctd header info (ctd metadata)
@@ -69,9 +70,6 @@ ctd_header <- read.csv(file="./ctd_data/dbo_CTD_HEADER.txt", header = TRUE, sep=
 # load CTD cast info (vertical oceanographic data)
 ctd_cast <- read.csv(file="./ctd_data/dbo_CTD_CAST.txt", header = TRUE, sep=",", stringsAsFactors = FALSE)
 
-# load station information-- here just for reference in case missing lat lon, but shouldn't otherwise need it
-#ctd_stations<- read.csv(file="./data/stations.csv", header = TRUE, sep=",", stringsAsFactors = FALSE)
-#I believe this list of standard stations comes from Keith- includes daytime CTD info position location for stations (4 digit during day)
 ```
 # Clean up imported CTD data- select for survey years of interest (2013:2018)
 -convert lat lon
@@ -91,20 +89,20 @@ ctd_header <- ctd_header %>%
             long.d = as.numeric(str_sub(x, start=1, end= 3)), #first 3 terms ddd
             long.m = as.numeric(str_sub(x, start=4, end=7)), #extract mm.mmm terms in position 4-7 
             LONGITUDE = -(long.d + long.m/60)) %>% # create new col for longitude, note - for longitude values
-            dplyr::select(-c(lat.d, long.d, lat.m, long.m, x, y)) #remove intermediary columns 
-  
+            dplyr::select(-c(lat.d, long.d, lat.m, long.m, x, y)) |>  #remove intermediary columns 
+            rename(year=Year)
+
 #create vector of years of our study
 survey_yrs <- 2013:2018
 
 # Select for our years of interest: 2013-2018
  ctd_header <- ctd_header %>%
-                filter(Year %in% survey_yrs)
+                filter(year %in% survey_yrs)
 
-#the code above converts CTD_LAT to LATITUDE and CTD_LONG to LONGITUDE variables in decimal degrees- this is the specific position of a given CTD, not the station position. Note there is a value for each record- whew! 
+#the code above converts CTD_LAT to LATITUDE and CTD_LONG to LONGITUDE variables in decimal degrees- this is the specific position of a given CTD, not the station position. Note there is a value for each record.
  
  # select for our years of interest (2013-2018) for the vertical profile info:Because we haven't merged these data to date cols, can only select by CRUISE ID. Note this is just in an effort to reduce the size of the df (a lot of data with all years + all casts)
  
- #unique(ctd_cast$CRUISE)
  
  cruise_yrs <- c(1305, 1405, 1505, 1603, 1703, 1802)
  
@@ -118,10 +116,10 @@ ctd_cast<-  ctd_cast %>%
 ```{r plot acoustic tracks with CTD locations}
 ggplot()+
   geom_sf(data=states)+
-  geom_point(data=echo_integration, aes(x=Lon_M, y=Lat_M, color=Year), show.legend = F)+ #plot acoustic tracks
+  geom_point(data=echo_integration, aes(x=Lon_M, y=Lat_M, color=year), show.legend = F)+ #plot acoustic tracks
   geom_point(data=ctd_header, aes(x= LONGITUDE, y=LATITUDE), color="black", shape=3,  size=1, show.legend = F)+
   coord_sf(crs=st_crs(states), xlim = c(min(echo_integration$Lon_M-0.25), max(echo_integration$Lon_M+0.25)), ylim = c(min(echo_integration$Lat_M-0.25), max(echo_integration$Lat_M+0.25)))+
-  facet_wrap(~Year)+
+  facet_wrap(~year)+
   theme_classic()
 ```
 # Join the actual vertical CTD data (ctd_cast) to our metadata (ctd_header for 2013:2018)
@@ -176,7 +174,7 @@ rm(ctd_cast, ctd_header)
 ctd_deep_loc <- ctd_deep_data %>% 
                 group_by(CRUISE, CTD_INDEX) %>% #unique code for each year + CTD cast
                 slice(n())%>% # select the last row for each unique CTD (CTD_INDEX) (and year)
-                dplyr::select(CRUISE, CTD_INDEX, CTD_BOTTOM_DEPTH, CTD_DEPTH, LATITUDE, LONGITUDE, Year)
+                dplyr::select(CRUISE, CTD_INDEX, CTD_BOTTOM_DEPTH, CTD_DEPTH, LATITUDE, LONGITUDE, year)
 ```
 # Plot CTD locations (casts that recorded data to at least 500m) over acoustic tracks
 Plotted the ctd index value so we can remove those outside study region
@@ -192,7 +190,7 @@ ggplot()+
   geom_text(data=ctd_deep_loc, aes(x=LONGITUDE, y=LATITUDE, label=CTD_INDEX), size=1.5, hjust=0.5, vjust=0.5)+
   scale_fill_continuous(trans = 'reverse')+ #reverse color scale 
   coord_sf(crs=st_crs(states), xlim = c(min(echo_integration$Lon_M-0.25), max(echo_integration$Lon_M+0.25)), ylim = c(min(echo_integration$Lat_M-0.25), max(echo_integration$Lat_M+0.25)))+
-  facet_wrap(~Year)+
+  facet_wrap(~year)+
   theme_classic()
 
 ```
@@ -204,15 +202,15 @@ ggplot()+
 ```{r}
 # Remove stations from 2016 (195, 194, 193) and 2018 (182, 172, 162, 221) that were sampled far outside of our typical core region (didn't process acoustics out there either)
 ctd_deep_loc_core <- ctd_deep_loc %>%
-                filter(!(Year==2016 & CTD_INDEX %in% c(195, 194, 193, 192)))%>% #remove stations from 2016 outside our acoustic tracks
-                filter(!(Year==2018 & CTD_INDEX %in% c(220, 219, 218, 217, 216, 221)))%>% # remove stations from 2018 outside acoustic tracks
+                filter(!(year==2016 & CTD_INDEX %in% c(195, 194, 193, 192)))%>% #remove stations from 2016 outside our acoustic tracks
+                filter(!(year==2018 & CTD_INDEX %in% c(220, 219, 218, 217, 216, 221)))%>% # remove stations from 2018 outside acoustic tracks
                 filter(LATITUDE >= 36.45 & LATITUDE <= 38.33) #core region
 
 
 # Remove the same stations from the data df
 ctd_deep_data_core <- ctd_deep_data %>%
-                filter(!(Year==2016 & CTD_INDEX %in% c(195, 194, 193, 192))) %>%
-                filter(!(Year==2018 & CTD_INDEX %in% c(220, 219, 218, 217, 216, 221)))%>% # remove stations from 2018 outside acoustic tracks
+                filter(!(year==2016 & CTD_INDEX %in% c(195, 194, 193, 192))) %>%
+                filter(!(year==2018 & CTD_INDEX %in% c(220, 219, 218, 217, 216, 221)))%>% # remove stations from 2018 outside acoustic tracks
                 filter(LATITUDE >= 36.45 & LATITUDE <= 38.33) # Select for only those CTD stations within the CORE region- LAT 36.45 to 38.33
 
 # rm previous (more inclusive version of CTD data)
@@ -233,21 +231,38 @@ ggplot()+
   geom_point(data=echo_integration, aes(x=Lon_M, y=Lat_M), color="grey", alpha=0.75, size=1, show.legend = F)+ #plot acoustic tracks
   geom_point(data=ctd_deep_loc_core, aes(x= LONGITUDE, y=LATITUDE, fill=CTD_DEPTH), color="darkblue", shape=3,  size=1.25, show.legend = F)+
   coord_sf(crs=st_crs(states), xlim = c(min(echo_integration$Lon_M-0.25), max(echo_integration$Lon_M+0.25)), ylim = c(min(echo_integration$Lat_M-0.25), max(echo_integration$Lat_M+0.25)))+
-  facet_wrap(~Year)+ # year not Year
+  facet_wrap(~year)+ # year not Year
   xlab("")+
   ylab("")+
   theme_classic()
 
 ggsave(filename = "./plots/ctd/ctd_deeper_500.jpeg")
 ```
-
-# NAMING CONSISTENCY--- 
-To match ctd data to acoustics regrid data for plotting, changing Year to year. 
+# 25 km gridded data + acoustic track + CTD
+#E69F00
+#CC79A7
 ```{r}
-ctd_deep_loc_core = ctd_deep_loc_core |> rename(year=Year)
+ggplot()+
+  geom_sf(data=states, fill="grey", color="black")+# plot state basemap
+  geom_point(data = acoustic_regrid, aes(x= lon, y=lat, fill=cm_m), color="black", stroke=0.25, size=6, shape=22, alpha=1)+ #plot regridded data
+  scale_fill_viridis_c(option = "D", direction=-1)+ #color output via viridis
+  geom_point(data=echo_integration_all, aes(x=Lon_M, y=Lat_M), size=0.05, color="#E69F00", alpha=0.9)+ #overlay of cruise track over regridded data
+  geom_point(data=ctd_deep_loc_core, aes(x= LONGITUDE, y=LATITUDE), color="white", shape=3,  size=1.25, stroke=0.75, show.legend = F)+
+  coord_sf(xlim = c(min(acoustic_regrid$lon-0.25), max(acoustic_regrid$lon+0.25)), ylim = c(min(acoustic_regrid$lat-0.25), max(acoustic_regrid$lat+0.25)))+ 
+  scale_x_continuous(breaks = lon, minor_breaks = NULL)+
+  scale_y_continuous(breaks=lat, minor_breaks = NULL)+
+  theme(axis.text.x = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text.y = element_blank(),
+        #panel.grid = element_line(colour = "black", linetype = "solid", linewidth =0.05),
+        panel.background = element_blank())+
+  labs(x="", y="", fill = "CM")+ #legend
+  facet_wrap(~year)
+  
+  
+#Save plot
+ggsave(filename=paste0("./plots/regrid_coverage_", grid_size, "_map.pdf"), width=170, units="mm")
 ```
-
-
 
 # Plot position of CTDs with regridded acoustics data
 I regridded all of the acoustics data to a 25 by 25km grid. 
@@ -275,7 +290,7 @@ ggsave(filename = "./plots/ctd/ctd_deeper_500_grid.pdf", width=8.5, dpi=300)
 ```{r Plot a practice CTD profile}
 # individual CTD cast or example
 
-ggplot(data = filter(ctd_deep_data_core, Year=="2014" & CTD_INDEX==8))+ #MANUALLY SELECTED
+ggplot(data = filter(ctd_deep_data_core, year=="2014" & CTD_INDEX==8))+ #MANUALLY SELECTED
   geom_point(aes(y=CTD_DEPTH, x= TEMPERATURE, color= "Temp"), size=1, alpha=0.4)+
   geom_line(aes(y=CTD_DEPTH, x= TEMPERATURE, color= "Temp"), linewidth=0.5, orientation = "y")+
   geom_point(aes(y=CTD_DEPTH, x= OXYGEN, color= "Oxygen"), size=1, alpha=0.4)+
@@ -313,7 +328,7 @@ ggplot(data = ctd_deep_data_core)+
   labs(color="Oceanographic variable")+
   ylab("Depth (m)")+
   xlab("")+
-  facet_wrap(~Year)+
+  facet_wrap(~year)+
   theme(panel.background = element_blank(),
         panel.grid = element_blank(),
         legend.key = element_blank())
@@ -325,7 +340,7 @@ Plot TS plots for all of our years of data
 ```{r}
 
 # or ALL profiles per year (by CTD_INDEX)
-ggplot(data = filter(ctd_deep_data_core, Year==2015), aes(x=SALINITY, y=TEMPERATURE, color=CTD_INDEX))+
+ggplot(data = filter(ctd_deep_data_core, year==2015), aes(x=SALINITY, y=TEMPERATURE, color=CTD_INDEX))+
   #geom_point(aes(y=TEMPERATURE, x= SALINITY, color= CTD_INDEX), size=0.5)+
   geom_text(aes(x=SALINITY, y=TEMPERATURE, label=CTD_INDEX), size=2)+
   ylab("Temperature (C)")+
@@ -344,7 +359,7 @@ Then, I went through and visually examined all of the variables (each ctd cast)
 ```{r}
 # would like to iterate over each ctd cast per given year
 
-yr= unique(ctd_deep_data_core$Year) #vector of years
+yr= unique(ctd_deep_data_core$year) #vector of years
 #for each CTD cast within a given year, plot a vertial profile and export
 
 # select for a specific year (2013-2018)
@@ -352,7 +367,7 @@ for (i in 1:length(yr)){
 
     # filter all CTD output for year i  
     yr_ctd <- ctd_deep_data_core %>%
-              filter(Year %in% yr[i])
+              filter(year %in% yr[i])
   
   
   #create vector of unique ctd casts (CTD_INDEX) for given year
@@ -416,12 +431,12 @@ In both cases I removed salinity and density data (but left other variables) bel
 ```{r}
 
 # CONVERT VALUES BELOW SPECIFIC DEPTH TO NA: 2015, CTD cast 220 remove below 300m-- salinity and density
-ctd_deep_data_core$SALINITY[ctd_deep_data_core$Year==2015 & ctd_deep_data_core$CTD_INDEX==220 & ctd_deep_data_core$CTD_DEPTH>=300] <- NA
-ctd_deep_data_core$DENSITY[ctd_deep_data_core$Year==2015 & ctd_deep_data_core$CTD_INDEX==220 & ctd_deep_data_core$CTD_DEPTH>=300] <- NA
+ctd_deep_data_core$SALINITY[ctd_deep_data_core$year==2015 & ctd_deep_data_core$CTD_INDEX==220 & ctd_deep_data_core$CTD_DEPTH>=300] <- NA
+ctd_deep_data_core$DENSITY[ctd_deep_data_core$year==2015 & ctd_deep_data_core$CTD_INDEX==220 & ctd_deep_data_core$CTD_DEPTH>=300] <- NA
 
 # 2017, CTD cast 28 remove below 100m-- salinity and density
-ctd_deep_data_core$SALINITY[ctd_deep_data_core$Year==2017 & ctd_deep_data_core$CTD_INDEX==28 & ctd_deep_data_core$CTD_DEPTH>=100] <- NA
-ctd_deep_data_core$DENSITY[ctd_deep_data_core$Year==2017 & ctd_deep_data_core$CTD_INDEX==28 & ctd_deep_data_core$CTD_DEPTH>=100] <- NA
+ctd_deep_data_core$SALINITY[ctd_deep_data_core$year==2017 & ctd_deep_data_core$CTD_INDEX==28 & ctd_deep_data_core$CTD_DEPTH>=100] <- NA
+ctd_deep_data_core$DENSITY[ctd_deep_data_core$year==2017 & ctd_deep_data_core$CTD_INDEX==28 & ctd_deep_data_core$CTD_DEPTH>=100] <- NA
 
 # Now we have removed the couple of outliers in our ctd data
 ```
@@ -441,7 +456,7 @@ chl_smooth_fx= function(x, n = 3){stats::filter(x, rep(1 / n, n), sides = 2)} #f
 
 # add new column for chl smooth (which is the smoothed value of chl with cell above and below)
 ctd_deep_data_core <- ctd_deep_data_core |> # all of our ctd data
-                      group_by(CTD_INDEX, Year) |> #so for each ctd cast per year
+                      group_by(CTD_INDEX, year) |> #so for each ctd cast per year
                       mutate(chl_smooth=round(chl_smooth_fx(x=CHLOROPHYLL, n=3), 2)) #calculate a smoothed value for chl based on 3 cells (1 on each side)
 
 ```
@@ -504,6 +519,31 @@ ctd_deep_data_core$Spice_gibbs <- oce::swSpice(salinity = ctd_deep_data_core$SAL
 # Add column for spice-- in situ temp: Flament's formulation
 ctd_deep_data_core$Spice_flament <- oce::swSpice(salinity = ctd_deep_data_core$SALINITY, temperature = ctd_deep_data_core$TEMPERATURE, pressure = ctd_deep_data_core$PRESSURE, longitude = ctd_deep_data_core$LONGITUDE, latitude = ctd_deep_data_core$LATITUDE, eos ="unesco") # Flaments
 ```
+
+
+# Calculate temperature, oxygen values at 175 m 
+NOTE: these data were binned into 2m depth bins, so to calculate values at an odd number, such as 175m which is the upper limit of our meso zone, we have to interpolate from cells above and below
+- salinity, temperature, oxygen and density at 175 m (mean between 174 and 176m)
+```{r}
+ctd_175=ctd_deep_data_core |> 
+  filter(CTD_DEPTH==174 | CTD_DEPTH==176) |> # depth above and below
+  group_by(year, CTD_INDEX, LATITUDE, LONGITUDE) |> #NOTE CTD_INDEX, LAT LON should be same for each CTD_cast
+  summarise(TEMPERATURE=mean(TEMPERATURE),
+            SALINITY=mean(SALINITY),
+            DENSITY= mean(DENSITY),
+            OXYGEN=mean(OXYGEN), 
+            .groups = "drop") |> 
+            mutate(CTD_DEPTH=175) #add CTD_DEPTH value of 175m
+
+# then add these values to our original dataset
+ctd_deep_data_core = rbind(ctd_deep_data_core, ctd_175)
+
+
+ctd_deep_data_core |> 
+  arrange(year, CTD_INDEX, CTD_DEPTH) # check, yes 175 m present
+```
+
+
 
 
 # Move to Ocean regrid.Rmd, then satellite.Rmd

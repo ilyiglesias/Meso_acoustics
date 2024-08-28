@@ -8,7 +8,7 @@ output: html_notebook
 - runs a GAM model with ocean covariates
 - evaluates model fit 
 
-88 total 25 by 25 km cells that have all oceanographic data and ocean covariates (df: acoustics_ctd)
+86 total 25 by 25 km cells that have all oceanographic data and ocean covariates (df: acoustics_ctd)
 
 
 # Background:
@@ -55,7 +55,7 @@ To evaluate linear correlation within our data, and be thoughtful (ie non-biased
 ```{r pairs plot}
 
 ocean_corr= acoustics_ctd |> 
-  dplyr::select(MVBS, temp_150m, temp_500m, temp_cm, chl_100m, den_150m, den_500m, den_cm, dyn_ht_500m, o2_150m, o2_500m, o2_cm, Z) #note that DEPTH_o2_05 is missing data points so might be causing errors
+  dplyr::select( MVBS, temp_175m, temp_500m, chl_100m, den_175m, den_500m, dyn_ht_500m, o2_175m, o2_500m, Z) #note that DEPTH_o2_05 is missing data points so might be causing errors
 
 pairs(ocean_corr) # base R, hard ot read
 
@@ -64,7 +64,7 @@ library(GGally)
 
 ggpairs(ocean_corr, upper = list(continuous=wrap("cor", size=2)))+
   theme(strip.text.x = element_text(size = 5),
-           strip.text.y = element_text(size = 3),
+           strip.text.y = element_text(size = 5),
         axis.text = element_text(size=5)) #change label size
 
 ggsave("./plots/analysis 2/paris.pdf")
@@ -72,11 +72,12 @@ ggsave("./plots/analysis 2/paris.pdf")
 Remove those terms with correlation coefficients >0.7 based on Dormann
 
 This leaves:
-MVBS, temp_150m, temp_500m, chl_100m, dyn_ht_500m, o2_150m, o2_cm, o2_500m, Z
+MVBS, temp_175m, temp_500m, chl_100m, dyn_ht_500m, o2_175m, o2_500m, Z
+(we removed density at 175 m and denstiy at 500 m)
 
 # FULL MODEL-- fit a GAM -- prior to concurvity evaluation (concurvity describes non linear correlation)
 Fit our full model with all of the covariates that passed our colinear examination
-while noting that will will likely need to additionally remove covariates that are concurvity(ied)?
+while noting that we will need to additionally remove covariates that are concurvity(ed)?
 ```{r}
 colnames(acoustics_ctd)
 class(acoustics_ctd$dyn_ht_500m) #scientific notation appears to cause problems
@@ -86,10 +87,9 @@ acoustics_ctd$dyn_ht_500m <- round(acoustics_ctd$dyn_ht_500m, 4)
 
 # Full GAM model:
 m_full <- gam(cm_m ~ 
-                s(temp_150m) + #temp at 150m
+                s(temp_175m) + #temp at 175m
                 s(temp_500m)+ #temp at 500m
-                s(o2_150m) +  # oxygen at 150m
-                s(o2_cm)+ # oxygen at 314m (mean cm depth)
+                s(o2_175m) +  # oxygen at 150m
                 s(o2_500m)+ #oxygen at 500m
                 s(chl_100m) + # integrated chl in upper 100m
                 s(dyn_ht_500m) + # dynamic height anomaly 
@@ -143,16 +143,17 @@ first have to rule out any additional correlation amongst covariates
 
 ```{r}
 # overall concurvity
-concrvity(m_full, pairwise = FALSE) # if less than 0.8 all terms ok
+gratia::concrvity(m_full, pairwise = FALSE) # if less than 0.8 all terms ok
 # if greater than 0.8, run pairwise comparisons
 
 conc <- concrvity(m_full, pairwise = TRUE)
 conc
 
 draw(conc)+
-  geom_text(aes(label=round(concurvity, 2)), size=2)+ #add actual values ot plot sweet none above 0.5
+  geom_text(aes(label=round(.concurvity, 1)), size=2)+ #add actual values ot plot sweet none above 0.5
   theme(axis.text.x = element_text(angle=90))
 
+ggsave("./plots/analysis 2/concurvity.pdf")
 ```
 https://gavinsimpson.github.io/gratia/reference/model_concurvity.html
 https://stats.stackexchange.com/questions/580791/interpretation-of-estimate-concurvity-vs-worst-concurvity-in-gams for interpretation
@@ -161,8 +162,8 @@ NOAM ROSS: https://noamross.github.io/gams-in-r-course/chapter2
 NROSS: "in general, we avoid putting multiple collinear variables into the same model" 
 "with GAMS we have an additional potential pitfall. Even if two variables aren't collinear, they may have concurvity, that is, one may be a smooth curve of another" If we use both variables as predictors in a model, we get smooths with wild confidence intervals
 
-Based on this advice, we then have to remove additional covariates:
-temperatuere at 150m, temperature at 500m, oxygen at 500m (correlated to Z)
+Based on this advice, we then have to additionally remove covariates:
+temperature at 500m
 
 #More on concurvity 
 ```{r}
@@ -174,10 +175,14 @@ format(concur$worst, scientific = FALSE) #convert from scientific notation but h
 
 ```
 NOAM ROSS: "since concurvity is complex, the function reports three different ways of measuring concurvity. Each is better in some situations. What is important is that you should always look at the worst case, and if the value is high (say, over 0.8), inspect your model more carefully"
+(removed both Temperature at 500 m and Temperature at 10m)
 
-The following would be the final list: (this is also what Jerome recommendedish read emails): between oxygen and temperature, oxygen makes more sense because there is some evidence that bioligcally limiting
+Of concern: Z and oxygen at 500 m (0.7) and Temperature at 175 m ~ Oxygen at 175 m (0.7)
 
-o2_150m
+The following would be the final list: between oxygen and temperature, oxygen makes more sense because there is some evidence that bioligcally limiting
+
+o2_175m
+temp_175m
 chl_100m
 dyn_ht_500m
 MVBS
@@ -193,8 +198,9 @@ Redo the procedure from above but with set of non-correlated covariates (now all
 
 # modified GAM model: use this one after convo with Jerome!!! 
 m_final <- mgcv::gam(cm_m ~ 
-                s(o2_150m) +  # oxygen at 150m depth
-                s(temp_cm)+
+                s(temp_175m) +  # temperature at 175m depth
+                s(o2_175m)+ # oxygen at 175 m
+                s(o2_500m)+ # oxygen at 500 m
                 s(chl_100m) + # integrated chl
                 s(dyn_ht_500m) + # dynamic height anomaly 
                 s(MVBS)+ #overall backscatter/biomass 
@@ -205,7 +211,19 @@ m_final <- mgcv::gam(cm_m ~
 
 summary(m_final)
 ```
-Model explained ~71.5% of variability in center of mass depth (m)
+Model explained ~81% of variability in center of mass depth (m)
+
+```{r}
+conc <- concrvity(m_final, pairwise = TRUE)
+conc
+
+draw(conc)+
+  geom_text(aes(label=round(.concurvity, 1)), size=2)+ #add actual values ot plot sweet none above 0.5
+  theme(axis.text.x = element_text(angle=90))
+```
+
+
+
 
 # Summary of final model
 ```{r}
@@ -278,51 +296,54 @@ Z
 (chlorophyll and oxygen were not significant)
 ```{r}
 #select our significant covariates
-p1 <- draw(m_final, select = "s(temp_cm)")
-p2 <- draw(m_final, select = "s(dyn_ht_500m)")
-p3 <- draw(m_final, select = "s(MVBS)")
-p4 <- draw(m_final, select = "s(Z)")
+p1 <- draw(m_final, select = "s(dyn_ht_500m)")
+p2 <- draw(m_final, select = "s(MVBS)")
+p3 <- draw(m_final, select = "s(Z)")
 
 # Plot side by side
-p4+p2+p3+p1+patchwork::plot_layout(ncol=4) & ggthemes::theme_few()
+p3+p2+p1+patchwork::plot_layout(ncol=4) & ggthemes::theme_few()
 
-# Update individual plot: temp at cm
+# Update individual plot: dynamic ht anomalies
 p1=p1+
   ggtitle("")+
-  xlab("Temp at 314 m [C]")+
+  xlab("Dynamic ht anomaly [m]")+
+  ylab("")+
   scale_x_continuous(expand = c(0,0))+
-  ggthemes::theme_few()
+  ggthemes::theme_few()+
+  theme(axis.title.x = element_text(size=16))
+
 p1
 
-# Update individual plot: dynamic height
-p2=p2+
-  ggtitle("")+
-  xlab("Dynamic ht anomaly [m]")+
-  scale_x_continuous(expand = c(0,0))+
-  ggthemes::theme_few()
-
+ggsave("./plots/analysis 2/partial_effects_dyn_ht.pdf", width=85, height=75, units="mm", dpi=300)
 
 # Update individual plot: MVBS
+p2=p2+
+  ggtitle("")+
+  xlab("MVBS [dB re 1 m-1]")+
+  ylab("")+
+  scale_x_continuous(expand = c(0,0))+
+  ggthemes::theme_few()+
+  theme(axis.title.x = element_text(size=16))
+
+ggsave("./plots/analysis 2/partial_effects_mvbs.pdf", width=85, height=75, units="mm", dpi=300)
+
+
+# Update individual plot: Euphotic depth
 p3=p3+
   ggtitle("")+
-  xlab("MVBS [dB]")+
+  xlab("Euphotic depth (Z) [m]")+
+  ylab("")+
+  #ylab("Partial effect on center of mass depth")+
   scale_x_continuous(expand = c(0,0))+
-  ggthemes::theme_few()
-
-
-# Update individual plot: Light (Z) depth at which light= 1% of surface irradiance
-p4=p4+
-  ggtitle("")+
-  xlab("Z [m]")+
-  scale_x_continuous(expand = c(0,0))+
-  ggthemes::theme_few()
-
+  ggthemes::theme_few()+
+  theme(axis.title.x = element_text(size=16))
+ggsave("./plots/analysis 2/partial_effects_z.pdf", width=85, height=75, units="mm", dpi=300)
 
 # Plot side by side
-p4+p3+p2+p1+patchwork::plot_layout(ncol=4) & ggthemes::theme_few()
+p3+p1+p2+patchwork::plot_layout(ncol=3) & ggthemes::theme_few()
 
 # save output
-ggsave("./plots/analysis 2/partial_effects_significant.pdf", width=10, height=4, dpi=300)
+ggsave("./plots/analysis 2/partial_effects_significant.pdf", width=170, height=100, units="mm", dpi=300)
 ```
  "the smooth effect of the covariate on the response conditional upon the other estimated terms"
  The zero line means the overall mean (on the link scale) of the response; negative values on the axis indicate wheer the effoect of the covariate reduces the response below the average value, and positiv values on the axis indicate those covariate values where the response is increased above the average All conditional upon the other estimated model terms. 
