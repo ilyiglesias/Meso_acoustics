@@ -3,25 +3,25 @@ title: "Read and visualize output from EV"
 output: html_notebook
 ---
 
-# Objective of code 
+This code was written by II for the manuscript: https://doi.org/10.1093/icesjms/fsae129
 
-This code was written by II to: 
+# Objective of code 
 - Load and view processed acoustic data exported from Echoview at stored at Dryad (DOI): doi:10.5061/dryad.hmgqnk9s0
 - Calculate echo-integration metrics for each Interval (Center of Mass, etc.) 
 - Plot echograms for each individual day of survey 
 
-Note: These data lead into --> Spatial autocorrelation.Rmd
+Note: This code leads into --> Spatial autocorrelation.Rmd
 
 # Background and Data Description
 
-These data are EK60/EK80 echosounder data collected from the core region of the RREA survey from 2013-2018 and have been filtered, processed, cleaned and exported from Echoview
+These data are EK60 echosounder data collected from the core region of the RREA survey from 2013-2018 and have been filtered, processed, cleaned and exported from Echoview
 - Cleaning: impulse noise removal, attenuated signal removal, transient noise and background noise removal
 - False bottoms identified via algorithm and removed manually 
 - Bad data removal:for each 100m by 5m cell (mean Sv) I set the whole cell to bad data- no data if
 there was less than 75% coverage for a given cell (good data-what was left after processing/raw Sv file prior to processing /100 %) 
-- These data are from depths greater than 550m deep (bottom depth)
+- These data are from depths greater than 725 m deep (bottom depth)
 - These data had a -75 dB threshold applied (prior to export, individual sample level (not per grid cell))
-- output is mean Sv (dB) data binned by 100m horizontal by 5m vertical cells EK60 data, 38 kHz from 150m to 525m.
+- output is mean Sv (dB) data binned by 100m horizontal by 5m vertical cells EK60 data, 38 kHz from 175m to 675 m
 
 
 # Load libraries
@@ -38,10 +38,9 @@ library(rdryad)
 ```{r}
 rdryad::dryad_dataset(doi="10.5061/dryad.hmgqnk9s0")
 ```
-NOTE: as this data is still pending review, they are not publically accessible. I will need to update this after acceptance of publication
 For more on package {rdryad} see: https://cran.r-project.org/web/packages/rdryad/rdryad.pdf
 
-NOTE: for now, data downloaded from Dryad stored in folder "Data" within working directory
+NOTE: for now, data downloaded from Dryad stored in folder "data" within working directory so to run code below, need to store output to a folder in your own working directory to run
 
 # Create list of .csv files to read into R: ALL years of data
 
@@ -55,7 +54,7 @@ length(filenames) #how many files (days) of data, should be 100
 
 # Read all Echoview output into R
 
-Note this is a lot of data (~4.5 million records), so may take awhile
+Note this is a lot of data (>4 million records), so may take awhile
 
 ```{r load files into R based on filenames, echo=FALSE}
 
@@ -101,7 +100,7 @@ linear_to_db <- function(linear){ 10*log10(linear)
 
 ### Calculate acoustic metrics from fine resolution (100m horizontal by 5m vertical) bins!
 Note: I am only integrating in the vertical direction for now (100m horizontal bins here, but will need to re-bin after spatial autocorrelation analysis)
-Note: that for each day of the survey that we processed, there should be unique Interval (horizontal) and layer (vertical) bins.
+Note: that for each day of the survey that we processed, there should be unique interval (horizontal) and layer (vertical) bins.
 Note: some of these are just for reference and were not used in analysis
 ```{r Acoustic metrics}
 
@@ -199,7 +198,7 @@ echo_integration_all <-  output |>
 ```
 
 # FOR LOOP: Create echograms of output for each unique day of the survey
-For reference, provide a helpful visual for looking at data quality of individual day's of data
+The following is for reference to provide a visual for looking at data quality of individual day's of data
 
 ```{r Echogram of meso depths with acoustic metrics for loop }
 
@@ -395,7 +394,7 @@ Head to "spatial autocorrelation.Rmd" to determine the spatial extent at which w
 
 # STUDY AREA and summary information:
 
-The information below summarizes some simple values about our data: total km traversed, mean depth, etc.
+The information below summarizes some simple values about our data: total km traversed, mean depth, etc. and is just for reference
 
 
 # Depth of acoustics data
