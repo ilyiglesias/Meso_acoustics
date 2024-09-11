@@ -4,7 +4,7 @@ output: html_notebook
 ---
 
 This code was written by II for the manuscript: https://doi.org/10.1093/icesjms/fsae129
-This code is preceded by "Spatial autocorrelation.Rmd" and followed by ""
+This code is preceded by "Spatial autocorrelation.Rmd" and followed by "Analysis 1.Rmd"
 
 
 # Objective of code:
@@ -154,7 +154,7 @@ grid= grid |> #this is in the UTM Zone 10N projection
       mutate(lon_grid_low=lon-(dist/2), lat_grid_low=lat-(dist/2)) |>  #new col with centroid value minus half grid cell distance
       mutate(lon_grid_hi=lon+(dist/2), lat_grid_hi=lat+(dist/2))
 
-# HI: convert grid df to sf feature so i can output coordinates -- note have to do this twice because 4 cols and only accepts two?
+# HI: convert grid df to sf feature so i can output coordinates -- note have to do this twice because 4 cols and only accepts two
 grid_hi <- grid |> 
            dplyr::select(cell, lon_grid_hi, lat_grid_hi)
 grid_hi_sf<- sf::st_as_sf(x=grid_hi, coords=c('lon_grid_hi','lat_grid_hi'), remove = FALSE, crs=32610)# in projected UTM
@@ -226,7 +226,7 @@ We now have clean gridlines and cell values for each of our acoustic re-gridded 
 
 # Calculate additional acoustic metrics to regrided output: Center of Mass (CM)
 
-Center of Mass (m)- integrated over 150m-525m
+Center of Mass (m)- integrated over 175m -- 675m
 
 I first created a col for sv (converting Sv db into sv linear) "MVBS_linear"
 THEN, I calculated a new column called "sv_z" which is the product of sv (linear) multiplied by the mean depth per cell
@@ -368,7 +368,7 @@ rm(cm, sv_z_sum, sv_sum) #remove intermediary dfs
 
 # Finally, calculate the total number of 100m horiztonal columns of water per grid cell.....
 
-The following uses our echointegrated df echo_integration_all which calculated acoustic metrics for each 100m horizontal water column of water from 150m to 525m. Unlike its original version, echo_integration which selected for only those water columns with less than 10 cells missing per 100m (so at least 65 out of 75 cells per water column,) this version has ALL of the data even if only a few values were available per water columns. Because we are regridding to much larger grid cell sizes (1km, 5km, 10km and 20km), we aren't adding the same filter, but want to verify # of smaller cells per new regrid to examine.
+The following uses our echointegrated df echo_integration_all which calculated acoustic metrics for each 100m horizontal water column of water from 150m to 525m. Unlike its original version, echo_integration which selected for only those water columns with less than 10 cells missing per 100m (so at least 75 out of 100 cells per water column,) this version has ALL of the data even if only a few values were available per water column. Because we are regridding to much larger grid cell sizes (1km, 5km, 10km and 20km), we aren't adding the same filter, but want to verify # of smaller cells per new regrid to examine.
 
 ```{r}
 # add a column to echo_integration_all for sv (ie convert from dB Sv to linear sv)
@@ -519,7 +519,7 @@ acoustics_regrid |>
   group_by(year) |> 
   summarise(total_vertical=sum(count), total_horizontal=sum(echo_count), total_cells=n(), .groups = "drop")
 ```
-NOTE: for 25km, the total number of 25 by 25km cells is pretty similar: 23, 23, 25, 24, 18, 22
+NOTE: for 25km, the total number of 25 by 25km cells is pretty similar: 20, 21, 24, 22, 14, 21
 (although this doesn't include an additional filter for those 25km cells with less than 3 100m cells.)
 
 # compare amount of data between cells?

@@ -3,6 +3,9 @@ title: "Compare biomass between years"
 output: html_notebook
 ---
 
+This code was written by II for the manuscript: https://doi.org/10.1093/icesjms/fsae129
+This code is preceded by "Spatial autocorrelation.Rmd" and followed by "Analysis 1.Rmd"
+
 # Objective of code
 Analysis 1: Are there differences in acosutically detected center of mass depth between years?! 
 
