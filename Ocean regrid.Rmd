@@ -4,10 +4,10 @@ output: html_notebook
 ---
 
 This code was written by II for the manuscript: https://doi.org/10.1093/icesjms/fsae129
-This code is preceded by "Ocean data.Rmd" and followed by "Ocean regrid.Rmd"
+This code is preceded by "Ocean data.Rmd" and followed by "satellite.Rmd"
 
 # Objective of code:
-the following code extracts CTD data for each re-gridded acoustic data cell (25km by 25km). This is different from Ocean data.rmd which processes all of the CTD data (visualizing profiles, smoothing data, calculating spice etc.) as well as Regrid.Rmd which re-gridded all of the acoustics data.
+the following code extracts CTD data for each re-gridded acoustic data cell (25km by 25km). This is different from Ocean data.rmd which processes all of the CTD data (visualizing profiles, smoothing data etc.)
 
 # CTD variables:
 I am interested in re-gridding the following CTD data:
@@ -717,17 +717,6 @@ rm(ctd_yr, ctd_yr_sf, x_yr, x_yr_df) #output from for loop
 CTD data from 150m, 500m and center of mass (CM) 314m depth
 
 Would like to join this CTD data to existing regrided acoustics data (acoustics_regrid)
-
-ctd_chl_100m
-ctd_den_175m
-ctd_den_500m
-ctd_dyn_ht_500m
-ctd_o2_175m
-ctd_o2_500m
-ctd_o2_cm
-ctd_temp_175m
-ctd_temp_500m
-ctd_temp_cm
 
 ```{r Join regridded CTD data}
 # now merge the individual df's to acoustics regrid based on latitude and longitude (which should be the same because they are also representing centroid values)
