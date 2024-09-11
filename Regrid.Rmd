@@ -3,6 +3,10 @@ title: "Regridding acoustic data following spatial autocorrelation analysis"
 output: html_notebook
 ---
 
+This code was written by II for the manuscript: https://doi.org/10.1093/icesjms/fsae129
+This code is preceded by "Spatial autocorrelation.Rmd" and followed by ""
+
+
 # Objective of code:
 Regrid our acoustics data from continuous tracks (gridded in echoview to 100 m horizontal by 5 m vertical grid cells) to spatially independent grid cell size (25 km)
 

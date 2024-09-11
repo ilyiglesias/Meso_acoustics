@@ -3,6 +3,9 @@ title: "R Notebook"
 output: html_notebook
 ---
 
+This code was written by II for the manuscript: https://doi.org/10.1093/icesjms/fsae129
+This code is preceded by "Read clean.Rmd" and followed by "Regrid.Rmd"
+
 # Objective of code
 
 We exported data in 100m horizontal by 5m vertical bins. At these distances, there is a substantial amount of spatial autocorrelation in Sv which would violate assumptions of independence for statistical analysis. We can alternatively think of this as "patch" size. This code includes a method to quantify the extent of spatial auto-correlation and provides a value to re-grid our data by (at a spatial independent distance)
@@ -247,7 +250,7 @@ sum(10, 27, 18, 53, 23, 24)/6 #25.83 km
 
 rm(distances)
 ```
-CONCLUSIONS: based on all of the information above an appropriate scale for regridding is 25km! 
+CONCLUSIONS: based on all of the information above an appropriate scale for regridding is 25km
 
 NEXT.... move to regridding.Rmd to regrid our acoustics data into different bin sizes 
 
