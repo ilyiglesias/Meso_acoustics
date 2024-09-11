@@ -3,14 +3,17 @@ title: "Environmental variables plots"
 output: html_notebook
 ---
 
+This code was written by II for the manuscript: https://doi.org/10.1093/icesjms/fsae129
+This code is preceded by "Analysis 2.Rmd" and is the final script of this project.
+
 # Objective of code:
-In this final .Rmd following Analysis 2 GAM.Rmd, we are interested in plotting our study region, calculating summary stats about our acoustic tracks and plotting the location various ctd data 
+In this final .Rmd we are interested in plotting our study region, calculating summary stats about our acoustic tracks and plotting the location various ctd data 
 
 - bathymetry map of acoustic tracks (where did we sample?)
 - each oceanographic variable plotted per year
 
 # Background
-We would like to have a plot showing the larger study are for reference as well as the oceanogrpahic variables we sampled over this region
+We would like to have a plot showing the larger study are for reference as well as the oceanographic variables we sampled over this region
 
 # Study area-- Map of acoustic tracks
 
@@ -123,7 +126,7 @@ echo_integration_all |>
   reframe(time_range=range(time)) #start and end dates per year
 ```
 # CTD date range
-Note that I am assuming here that the ctd_deep_data_core df is the final version of what was included in each grid cell (I believe this is the case, but its been awhile and there may have been some additional filtering). Pretty sure these are correct. 
+
 ```{r}
 ctd_deep_data_core |> 
   group_by(year) |> 
@@ -141,8 +144,7 @@ acoustics_ctd |>
 ```
 
 # PLOT of grid cells with acoustic track and CTD position overlaid 
-II update 12/1/23: getting the error message that "lon" from breaks no longer found. To remedy, 
-NOTE: the change I added was in removing the grid pattern (start and end lat/lon) which was no longer available as a df. I could simply re-add these by re-running previous code from the re-gridding process, but instead I am jsut sticking with the square symbol to represent the location of grid cells (and which were matched up with lat lon in previous iterations)
+
 ```{r}
 
 # Plot grid cells with acoustic tracks and ctd cast locations
@@ -182,154 +184,6 @@ ggsave(filename = "./plots/analysis 2/coverage_grid_ctd.pdf")
   
 ggsave(file="./plots/analysis 2/ctd_grid.pdf")
   
-```
-
-# Plot of oceanographic variable over space -- center of mass depth
-The following creates a faceted map by year of center of mass depth... or other oceanographic variables for comparison
-
-```{r}
-ggplot()+
-  geom_sf(data=states)+ # add a basemap
-  coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39))+ #study region
-  geom_point(data=acoustics_ctd, aes(x=lon, y=lat, fill=cm_m), size=3.8, shape=22)+  # Z is the depth at which light is 1% of surface
-  cmocean::scale_fill_cmocean(name="deep", direction=1)+
-  geom_text(data=acoustics_ctd, aes(x=lon, y=lat, label=round(cm_m, 0)), size=1)+  # label cm depth
-  guides(fill=guide_colourbar(reverse = TRUE))+ #reverse color ramp direction in legend so deeper at bottom
-  labs(fill="Center of mass [m]")+#change legend title
-  theme(panel.background = element_blank(),
-        axis.text.x = element_text(angle=90))+
-  xlab("")+
-  ylab("")+
-  facet_wrap(~year)
-
-ggsave(filename = "./plots/analysis 2/oceano/cm.pdf")
-```
-
-
-
-# Depth at 1% light 
-```{r}
-ggplot()+
-  geom_sf(data=states)+ # add a basemap
-  coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39))+ #study region
-  geom_point(data=acoustics_ctd, aes(x=lon, y=lat, fill=Z), size=3.80, shape=22)+  # Z is the depth at which light is 1% of surface
-  cmocean::scale_fill_cmocean(name="haline", direction=-1)+ #reverse color direction 
-  guides(fill=guide_colourbar(reverse = TRUE))+ #reverse color ramp direction in legend so deeper at bottom
-  geom_text(data=acoustics_ctd, aes(x=lon, y=lat, label=round(cm_m, 0)), size=1)+  # label cm depth
-  theme(panel.background = element_blank(),
-        axis.text.x = element_text(angle=90))+
-  xlab("")+
-  ylab("")+
-  facet_wrap(~year)
-
-
-# save output
-ggsave("./plots/analysis 2/oceano/Z.pdf") # will auto adjust height 
-
-```
-
-#chlorophyll in upper 100m
-```{r}
-ggplot()+
-  geom_sf(data=states)+ # add a basemap
-  coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39))+ #study region
-  geom_point(data=acoustics_ctd, aes(x=lon, y=lat, fill=chl_100m), size=3.8, shape=22)+  # Z is the depth at which light is 1% of surface
-  cmocean::scale_fill_cmocean(name="algae", direction=1)+
-  geom_text(data=acoustics_ctd, aes(x=lon, y=lat, label=round(cm_m, 0)), size=1)+  # label cm depth
-  labs(fill="Chl-a")+
-  guides(fill=guide_colorbar(reverse = TRUE))+
-  theme(panel.background = element_blank(),
-        axis.text.x = element_text(angle=90))+
-  xlab("")+
-  ylab("")+
-  facet_wrap(~year)
-    
-    
-    
-# save output
-ggsave("./plots/analysis 2/oceano/chl.pdf") # will auto adjust height 
-
-```
-#dyanmic height anomalies in 500m 
-
-```{r}
-ggplot()+
-  geom_sf(data=states)+ # add a basemap
-  coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39))+ #study region
-  geom_point(data=acoustics_ctd, aes(x=lon, y=lat, fill=dyn_ht_500m), size=3.8, shape=22)+  # Z is the depth at which light is 1% of surface
-  cmocean::scale_fill_cmocean(name="balance", direction=1)+
-  geom_text(data=acoustics_ctd, aes(x=lon, y=lat, label=round(cm_m, 0)), size=1)+  # label cm depth
-  labs(fill="Dyn ht [m]")+
-  theme(panel.background = element_blank(),
-        axis.text.x = element_text(angle=90))+
-  xlab("")+
-  ylab("")+
-  facet_wrap(~year)
-
-# save output
-ggsave("./plots/analysis 2/oceano/dyn_ht.pdf") 
-
-```
-Dynamic height as measured via CTD along coast: (these are dynamic height anomalies at 500m depth)
-more negative== more upwelling (greater tilt in isopycnal)
-more positive== less upwelling
-
-
-#oxygen at 175m
-```{r}
-ggplot()+
-  geom_sf(data=states)+ # add a basemap
-  coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39))+ #study region
-  geom_point(data=acoustics_ctd, aes(x=lon, y=lat, fill=o2_175m), size=3.8, shape=22)+  # Z is the depth at which light is 1% of surface
-  cmocean::scale_fill_cmocean(name="thermal", direction=-1)+
-  geom_text(data=acoustics_ctd, aes(x=lon, y=lat, label=round(cm_m, 0)), size=1)+  # label cm depth
-  labs(fill="DO at 175 m")+
-  guides(fill=guide_colorbar(reverse=TRUE))+
-  theme(panel.background = element_blank(),
-        axis.text.x = element_text(angle=90))+
-  xlab("")+
-  ylab("")+
-  facet_wrap(~year)
-
-# save output
-ggsave("./plots/analysis 2/oceano/o2.pdf") # will auto adjust height
-```
-
-#MVBS 
-```{r}
-ggplot()+
-  geom_sf(data=states)+ # add a basemap
-  coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39))+ #study region
-  geom_point(data=acoustics_ctd, aes(x=lon, y=lat, fill=MVBS), size=3.8, shape=22)+  # Z is the depth at which light is 1% of surface
-  cmocean::scale_fill_cmocean(name="thermal", direction=1)+
-  geom_text(data=acoustics_ctd, aes(x=lon, y=lat, label=round(cm_m, 0)), size=1)+  # label cm depth
-  theme(panel.background = element_blank(),
-        axis.text.x = element_text(angle=90))+
-  xlab("")+
-  ylab("")+
-  facet_wrap(~year)
-
-# save output
-ggsave("./plots/analysis 2/oceano/mvbs.pdf") 
-```
-# Temperature at cm depth (322 m)
-```{r}
-ggplot()+
-  geom_sf(data=states)+ # add a basemap
-  coord_sf(xlim=c(-124.5, -121 ), ylim=c(36 ,39))+ #study region
-  geom_point(data=acoustics_ctd, aes(x=lon, y=lat, fill=temp_cm), size=3.8, shape=22)+  # Z is the depth at which light is 1% of surface
-  cmocean::scale_fill_cmocean(name="thermal", direction=1)+
-  geom_text(data=acoustics_ctd, aes(x=lon, y=lat, label=round(cm_m, 0)), size=1)+  # label cm depth
-  labs(fill="Temp at 314 m [C]")+
-  guides(fill=guide_colorbar(reverse = TRUE))+
-  theme(panel.background = element_blank(),
-        axis.text.x = element_text(angle=90))+
-  xlab("")+
-  ylab("")+
-  facet_wrap(~year)
-
-# save output
-ggsave("./plots/analysis 2/oceano/temp_314m.pdf", dpi=300) # will auto adjust height
 ```
 # Oceanographic variables between years
 
@@ -381,11 +235,6 @@ ggplot(data=acoustics_ctd, aes(x=as.factor(year), y=dyn_ht_500m, group=year, col
 
 ggsave(filename = "./plots/analysis 2/oceano/box_dyn_ht.pdf", width=170, height= 100,units="mm", dpi=300)
 ```
-Interpretation: during the two warmest years, there seems to be an increase in dynamic height, indicative of decreased upwelling (negative values= more upwelling), 0-+ values= less upwelling, especially in 2016. 
-
-
-
-Note: need acosutics_ctd to be numeric for other plotting so convert with caution or just switch back to numeric
 
 # Light between years 
 ```{r}
@@ -421,8 +270,6 @@ ggplot(data=acoustics_ctd, aes(x=as.factor(year), y=temp_175m, group=year, color
 
 ggsave(filename = "./plots/analysis 2/oceano/box_temp_meso.pdf", width=170, height= 100,units="mm", dpi=300)
 ```
-Note that the changes in temperature here were pretty minimal: less than half of a degree but then again Jerome had said that any change during this time was probably a big deal at these depths
-
 
 # Temp at meso depths (175m) between years 
 ```{r}
@@ -441,9 +288,6 @@ ggplot(data=acoustics_ctd, aes(x=as.factor(year), y=temp_10m, group=year, color=
 
 ggsave(filename = "./plots/analysis 2/oceano/box_temp_surface.pdf", width=170, height= 100,units="mm", dpi=300)
 ```
-
-
-
 
 # MVBS between years
 ```{r}
@@ -495,55 +339,6 @@ ggplot(data=acoustics_ctd, aes(x=as.factor(year), y=o2_175m, group=year, color=a
 
 ggsave(filename = "./plots/analysis 2/oceano/box_DO.pdf", width=170, height= 100,units="mm", dpi=300)
 ```
-
-
-
-# DESCRIPTION OF OCEANOGRAPHIC VARIABLES
-
-I would like to write up a short paragraph in the results describing ranges and extremes of oceanographic variables from our analysis 
-acoustics_ctd: df with mean values per acoustic grid cell (25km)
-# Oceanographic variability
-```{r}
-# Light Z
-range(acoustics_ctd$Z) # 7-71
-# determine year of min and max values
-acoustics_ctd[acoustics_ctd$Z==min(acoustics_ctd$Z),"year"] #2014
-acoustics_ctd[acoustics_ctd$Z==max(acoustics_ctd$Z),"year"] #2015
-
-# MVBS
-range(acoustics_ctd$MVBS) # -75 -- -62 dB
-# determine year of min and max values
-acoustics_ctd[acoustics_ctd$MVBS==min(acoustics_ctd$MVBS),"year"] # 2017
-acoustics_ctd[acoustics_ctd$MVBS==max(acoustics_ctd$MVBS),"year"] # 2015
-
-# Temp at 314 m
-range(acoustics_ctd$temp_175m) # 6.315 to 8.00 )314 m
-# determine year of min and max values
-acoustics_ctd[acoustics_ctd$temp_cm==min(acoustics_ctd$temp_cm),"year"] # 2016
-acoustics_ctd[acoustics_ctd$temp_cm==max(acoustics_ctd$temp_cm),"year"] # 2014
-
-# Dynamic height anomalies
-range(acoustics_ctd$dyn_ht_500m) # -0.0867 to 0.1300
-# determine year of min and max values
-acoustics_ctd[acoustics_ctd$dyn_ht_500m==min(acoustics_ctd$dyn_ht_500m),"year"] # 2013
-acoustics_ctd[acoustics_ctd$dyn_ht_500m==max(acoustics_ctd$dyn_ht_500m),"year"] # 2016
-
-
-# DO at 150 m
-range(acoustics_ctd$o2_150m) # 1.57 - 4.24
-# determine year of min and max values
-acoustics_ctd[acoustics_ctd$o2_150m==min(acoustics_ctd$o2_150m),"year"] # 2013
-acoustics_ctd[acoustics_ctd$o2_150m==max(acoustics_ctd$o2_150m),"year"] # 2013
-
-
-# Chl-a upper 100 m
-range(acoustics_ctd$chl_100m) # 0.00 - 405.11
-# determine year of min and max values
-acoustics_ctd[acoustics_ctd$chl_100m==min(acoustics_ctd$chl_100m),"year"] # 2018
-acoustics_ctd[acoustics_ctd$chl_100m==max(acoustics_ctd$chl_100m),"year"] # 2014
-
-```
-
 
 
 # end...
