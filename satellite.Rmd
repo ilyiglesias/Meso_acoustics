@@ -3,13 +3,16 @@ title: "Satellite data"
 output: html_notebook
 ---
 
+This code was written by II for the manuscript: https://doi.org/10.1093/icesjms/fsae129
+This code is preceded by "Ocean regrid.Rmd" and followed by "Analysis 2 GAM.Rmd"
+
 # Objective of code
 
 Extract information about light from satellite data via ERDDAP (Aqua Modis satellite)
 
 
 # Background
-We did not have CTD light data available for all years of our study, and so the following code extracts satellite light data for the location of our acoustics tracks
+We did not have CTD light data available for all years of our study. The following code extracts satellite light data for the location of our acoustics tracks
 
 8-day composite in 4km grid cells
 
@@ -79,7 +82,7 @@ k490_track= rerddapXtracto::rxtracto(dataInfo=k490_info, parameter="k490", xcoor
 k490= k490_track$`mean k490` #k490 mean
 time=k490_track$`satellite date` # time
 lon=k490_track$`requested lon min` # lon
-lat=k490_track$`requested lat min` # lat not could be either min or max it looks like bc same
+lat=k490_track$`requested lat min` 
 
 k490_track_df= as.data.frame(cbind(k490, time, lon, lat))
 rm(k490, time, lon, lat)
@@ -114,12 +117,12 @@ str(k490_track_df)
 class(k490_track_df$time)
 
 
-# finally, convert our kd490 valus from the diffusion corefficient to a 1% light level depth via our function Z
+# finally, convert our kd490 valus from the diffusion coefficient to a 1% light level depth via our function Z
 #function(per, Kd){-log(per)/Kd
 #}
 
 k490_track_df$Z <- Z(per=0.01, Kd=k490_track_df$k490) # 0.01 is 1%
-range(k490_track_df$Z) # note that this range goes from 1.2 to 90 m?!! I would have thought it was much deeper than this, so I may have to think about what this means
+range(k490_track_df$Z) 
 ```
 
 # PLOT DATA-- Plot of light levels overlaid acoustic track data 
@@ -141,7 +144,7 @@ ggplot()+
     facet_wrap(~year)
 
 ```
-# Compare irradiance between years-- Ignore below, but leaving for ref
+# Compare irradiance between years-- just for reference
 ```{r}
 
 # summarize mean light between years
@@ -207,18 +210,12 @@ ggplot()+
   
 ggsave("./plots/light_tracks.pdf")
 ```
-# Regrid these depth at which light = 1% values to our grid....
-This is code I am stealing and updating from my own previous code Ocean regrid.Rmd
 
 # Regrid SATELLITE data - LIGHT 
 ```{r satellite derived light data from MODIS satellite data}
 
 # check resolution of raster layer : should be 25000 and 25000
 res(r)
-
-# ensure the grids from acosutics_regrid are appropriate for this size (ex. 20km)
-#acoustics_regrid= acoustics_regrid_25km #only do once or will overwrite
-
 
 # FOR LOOP: For each unique year of CTD data (and acoustics)
 yr= unique(k490_track_df$year)
@@ -295,144 +292,10 @@ acoustics_ctd= acoustics_ctd |>
 
 ```
 
-Total of 86 cells that have acoustics data, CTD data and satellite light data
 
-# Next
-.....
+# Next code....
 
-
-
-
-# TO address reviewer comment 
-At a minimum, the authors need to use these observations to see how well Aquamodis data reflected water column light penetration in years that had both datasets...
-
-#calculate the depth at which PAR sensor reached 0?
-
-```{r}
-
-# PER CTD CAST, depth at which light = 1% value at 2m 
-ctd_euphoic_light= ctd_deep_data_core |>
-  select(year, CTD_INDEX, CTD_DEPTH, IRRAD) |> 
-  filter(!is.na(IRRAD)) |> 
-  filter(CTD_DEPTH==2) |> # considering this "surface" conditions
-  mutate(light_2m=IRRAD) |> # light at "surface"
-  mutate(light_1_per_2m=light_2m*0.01) |> # light that is 1% of light at "surface"
-  select(-IRRAD, -CTD_DEPTH)
-
-# Depth at which light is == 1% of 2 m
-# calculate distance from each IRRAD value to each value and then find minimum value
-
-light= ctd_deep_data_core |> 
-  select(year, CTD_INDEX, CTD_DEPTH, IRRAD) |> 
-  filter(!is.na(IRRAD))
-  
-# cbind to add euphoic depth value 
-light=left_join(light, ctd_euphoic_light, by=c("year", "CTD_INDEX"))
-
-
-#filter instead of summarize
-light_min= light |> 
-  filter(!is.na(light_2m)) |> # ensure there was a value for light at 2m >0
-  filter(light_2m>0) |> 
-  group_by(year, CTD_INDEX) |> # for each year and ctd cast
-  filter(dist==min(abs(dist))) # return the row when distance is at a minimum (ie closest value of IRAD to 1% of surface irrad)
-
-# mean "euphotic" depth per year
-light_min_yr=light_min |> 
-  group_by(year) |> 
-  summarise(mean_euphotic_depth=mean(CTD_DEPTH))
-
-
-```
-
-# ADD PAR data to our satellite data
-
-Adding these values to our boxplots 
-
-```{r}
-
-# Calculate median values for CTD data
-ctd_years= light_min |> 
-  group_by(year) |> 
-  summarise(mean_Z=mean(CTD_DEPTH), sd_Z=sd(CTD_DEPTH), median_Z=median(CTD_DEPTH))
-
-ggplot()+ #plot of satellite data, Z (depth at which light= 1% surface irradiance)
-  geom_boxplot(data=k490_track_df, aes(x=year, y=Z))+ # satellite data
-  #geom_boxplot(data=light_min, aes(x=factor(year), y=CTD_DEPTH), color="orange", alpha=0.25)+
-  stat_boxplot(geom="errorbar", width=0.25)+
-  scale_y_reverse()+
-  geom_text(data=k490_years, aes(x=year, y=median_z, label=paste0("Z [m] =",round(median_z, 2))), vjust=2, size=2.5)+
-  geom_point(data=light_min, aes(x=factor(year), y=CTD_DEPTH), color="chocolate", alpha=0.75, size=2)+
-  geom_point(data=ctd_years, aes(x=factor(year), y=mean_Z), size=5, color="chocolate", alpha=0.5)+
-  geom_point(data=ctd_years, aes(x=factor(year), y=median_Z), size=5, color="chocolate", alpha=0.5)+
-  geom_label(data=ctd_years, aes(x=factor(year), y=mean_Z, label=paste0("Mean Z [m] =",round(mean_Z, 2))),  size=2.7, color="chocolate")+
-  geom_label(data=ctd_years, aes(x=factor(year), y=median_Z, label=paste0("Median Z [m] =",round(median_Z, 2))),  size=2.7, color="chocolate")+
-  xlab("Year")+
-  ylab("Z [m]")+
-  ggthemes::theme_few()
-
-ggsave("./plots/par_satellite.pdf")
-```
-
-# Calculate annual profiles 
-```{r}
-# ANNUAL AVERAGES 
-
-mean_par_profiles= ctd_deep_data_core |> 
-  group_by(year, CTD_DEPTH) |> 
-  summarise(mean_irrad=mean(IRRAD), .groups = "drop") |> 
-  filter(!is.na(mean_irrad))
-
-unique(mean_par_profiles$year)
-
-
-# Calculate depth at which irradiance equals zero?
-mean_par_profiles |> 
-  group_by(year) |> 
-  filter(mean_irrad==0) |> 
-  slice(1) #first record where equals zero 
-
-# calculate depth at which irradiance equals 1% of surface value
-
-
-
-mean_par_profiles$mean_irrad[min(which(mean_par_profiles$mean_irrad==0.00))]
-```
-
-# return depth when ligth reaches closest value to 1% of light at 2m 
-light |> 
-  filter(!is.na(light_2m)) |> # ensure we had a value for light at the "surface"
-  group_by(year, CTD_INDEX) |>  #for each year and ctd cast within a year
-  summarise(p=nth(IRRAD, which.min(abs(IRRAD-light_1_per_2m)))) #return the smallest distance from Irradiance value to our targeted irradiance value
-
-
-
-
-
-# PLOT mean profile 
- 
-```{r}
-
-ggplot()+
-    geom_line(data=mean_par_profiles, aes(y=CTD_DEPTH, x= mean_irrad), color="grey", linewidth=1.5, orientation="y")+ #line
-    geom_point(data=mean_par_profiles, aes(y=CTD_DEPTH, x= mean_irrad), color="sienna3", size=2, alpha=0.4)+ #plot individual points above
-  geom_text(data=mean_par_profiles, aes(y=CTD_DEPTH, x=mean_irrad, label=round(mean_irrad, 2)), hjust=-1, size=2)+
-    scale_y_reverse(expand=c(0,0), limits=c(100,0))+ #remove extra space so plots begin at the surface
-    xlab("par")+
-    ylab("Depth (m)")+
-    ggtitle("Mean profile of PAR")+ # create a title for CTD station year and CTD cast
-  geom_vline(xintercept = 0, linetype="dashed", color="darkgrey")+ #simple line demarking mesopelagic depths
-  theme(panel.grid.major=element_blank(), 
-        panel.grid.minor=element_blank(), 
-        panel.background = element_blank(),
-        panel.border = element_rect(colour="black", fill=NA, linewidth =2),
-        legend.key = element_rect(fill=NA))+
-  facet_wrap(~year)
-
-```
-
-
-
+Move to Analysis 2 GAM.Rmd 
 
 
 

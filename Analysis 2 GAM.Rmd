@@ -2,9 +2,11 @@
 title: "R Notebook"
 output: html_notebook
 ---
+This code was written by II for the manuscript: https://doi.org/10.1093/icesjms/fsae129
+This code is preceded by "satellite.Rmd" and followed by "Analysis 2 plots.Rmd"
 
 # Objective of code:
-- checks for correlation amongst ocean variables (linear + nonlinear)
+- checks for correlation among ocean variables 
 - runs a GAM model with ocean covariates
 - evaluates model fit 
 
@@ -13,7 +15,7 @@ output: html_notebook
 
 # Background:
 
-Interested in which oceanographic variables may be influencing center of mass depth (vertical position) of mesopelagic "fishes." Using a combination of CTD  and satellite (light) data, construct a generalized additive model (GAM) to determine whether the variables we included seem to have had an effect on center of mass depth.  
+Interested in which oceanographic variables may be influencing center of mass depth (vertical position) of mesopelagic fishes. Using a combination of CTD  and satellite (light) data, construct a generalized additive model (GAM) to determine whether the variables influenced center of mass depth.  
 
 
 # gratia
@@ -22,8 +24,7 @@ install.packages("gratia",repos = c("https://gavinsimpson.r-universe.dev","https
 # load packages
 
 ```{r load libraries}
-# update any installed R packages
-#update.packages(ask = TRUE, checkBuilt = TRUE)
+
 library(mgcv) # GAM function
 library(gratia) # gam plotting by Gavin Simpson (course instructor) - need to reload for most recent version
 library(tidyverse)
@@ -45,11 +46,8 @@ acoustics_ctd |>
 qqnorm(acoustics_ctd$cm_m)
 qqline(acoustics_ctd$cm_m)
 ```
-# Evaluate correlation (linear) between covariates (ocean data)
-first step, check for correlation prior to modeling data with a GAM- this is simple linear correlation (evaluating collinearity), but we will also have to check for non-linear correlation via "concurvity" after fitting model.
-
 # Pairplot
-To evaluate linear correlation within our data, and be thoughtful (ie non-biased) in which variables to include
+To evaluate linear correlation within our data
 
 # pairs plot via ggplot
 ```{r pairs plot}
@@ -77,7 +75,7 @@ MVBS, temp_175m, temp_500m, chl_100m, dyn_ht_500m, o2_175m, o2_500m, Z
 
 # FULL MODEL-- fit a GAM -- prior to concurvity evaluation (concurvity describes non linear correlation)
 Fit our full model with all of the covariates that passed our colinear examination
-while noting that we will need to additionally remove covariates that are concurvity(ed)?
+while noting that we will need to additionally remove covariates that approximate eachother (concurvity)
 ```{r}
 colnames(acoustics_ctd)
 class(acoustics_ctd$dyn_ht_500m) #scientific notation appears to cause problems
@@ -123,7 +121,6 @@ ggthemes::theme_few() #note use of & in plot to apply theme options to all plots
 
 ```
 # Plot with {mgcv}
-great documenation from NOAM ROSS online tutorial 
 ```{r}
 plot(m_full, rug = TRUE, residuals = TRUE, se=TRUE, shade=TRUE, shade.col="cadetblue",
      pch = 1, cex = 0.5) #this includes points for residuals 
@@ -136,10 +133,8 @@ appraise(m_full, method = "simulate") # look at plot diagnostics
 # Our data appear to be approximately Gaussian, good fit except for at the extreme tails, overall a reasonable fit to our data
 ```
 
-This model has a r-quared of 69% without including year or position (lat, lon)
-
 #  Further examine correlation (non-linear) amongst variables using the concurvity function on our output
-first have to rule out any additional correlation amongst covariates
+first have to rule out any additional correlation among covariates
 
 ```{r}
 # overall concurvity
@@ -155,6 +150,7 @@ draw(conc)+
 
 ggsave("./plots/analysis 2/concurvity.pdf")
 ```
+# Helpful references
 https://gavinsimpson.github.io/gratia/reference/model_concurvity.html
 https://stats.stackexchange.com/questions/580791/interpretation-of-estimate-concurvity-vs-worst-concurvity-in-gams for interpretation
 NOAM ROSS: https://noamross.github.io/gams-in-r-course/chapter2
@@ -169,17 +165,16 @@ temperature at 500m
 ```{r}
 concurvity(m_full, full = TRUE) #overall - if any values high, run full=FALSE for pairwise comparisons 
 concur=concurvity(m_full, full = FALSE) # pairwise concurvities
-concur$worst #look at output for worst value 
-# convert format to non-scientific so I can evaluate actual values :)
+concur$worst #look at output for "worst" value 
+# convert format
 format(concur$worst, scientific = FALSE) #convert from scientific notation but harder to read look for values greater than 0.5 
 
 ```
 NOAM ROSS: "since concurvity is complex, the function reports three different ways of measuring concurvity. Each is better in some situations. What is important is that you should always look at the worst case, and if the value is high (say, over 0.8), inspect your model more carefully"
 (removed both Temperature at 500 m and Temperature at 10m)
 
-Of concern: Z and oxygen at 500 m (0.7) and Temperature at 175 m ~ Oxygen at 175 m (0.7)
 
-The following would be the final list: between oxygen and temperature, oxygen makes more sense because there is some evidence that bioligcally limiting
+The following is the final list of covariates: between oxygen and temperature, oxygen makes more sense because there is some evidence that biologically limiting
 
 o2_175m
 temp_175m
@@ -188,11 +183,8 @@ dyn_ht_500m
 MVBS
 Z
 
-Note: because we no longer have a term for temperature, but previously selected co-linear temperature terms above, going to add term for temperature at 314 m (which was collinar to previous temperature terms, but not to this final list of terms (linear or concurvity).
-
-
-# FINAL MODEL GAM
-Redo the procedure from above but with set of non-correlated covariates (now all non correlated (check both colinarity and concurvity))
+# FINAL MODEL -GAM
+Redo the procedure from above but with set of non-correlated covariates (now all non correlated (checked both colinarity and concurvity))
  
 ```{r}
 
@@ -223,15 +215,11 @@ draw(conc)+
 ```
 
 
-
-
 # Summary of final model
 ```{r}
 summary(m_final)
 mgcv::summary.gam(m_final) #same same just via {mgcv}
 ```
-
-Temperature at 314 m (mean cm depth), dynamic height anomalies, MVBS (estimate of overall biomass), and Z (light) were significant terms explaining a combined 71.5% of the variance in center of mass depth (response). 
 
 # Check model fit
 ```{r}
@@ -289,11 +277,7 @@ gratia::draw(m_final)&
 ggsave("./plots/analysis 2/gam_partialeffects_all.pdf", width=10, height=8, dpi=300)
 ```
 # Select for significant covariates
-temperature at cm depth
-dynamic height
-MVBS
-Z
-(chlorophyll and oxygen were not significant)
+
 ```{r}
 #select our significant covariates
 p1 <- draw(m_final, select = "s(dyn_ht_500m)")
@@ -345,9 +329,9 @@ p3+p1+p2+patchwork::plot_layout(ncol=3) & ggthemes::theme_few()
 # save output
 ggsave("./plots/analysis 2/partial_effects_significant.pdf", width=170, height=100, units="mm", dpi=300)
 ```
- "the smooth effect of the covariate on the response conditional upon the other estimated terms"
- The zero line means the overall mean (on the link scale) of the response; negative values on the axis indicate wheer the effoect of the covariate reduces the response below the average value, and positiv values on the axis indicate those covariate values where the response is increased above the average All conditional upon the other estimated model terms. 
- -G. Simpson
+ "the smooth effect of the covariate on the response conditional upon the other estimated terms" - G. Simpson
+ The zero line means the overall mean (on the link scale) of the response; negative values on the axis indicate where the effect of the covariate reduces the response below the average value, and positive values on the axis indicate those covariate values where the response is increased above the average 
+
  
 # PLOT partial effects plots with mgcv instead of gratia
 mgcv::plot.gam
