@@ -3,6 +3,9 @@ title: "Regrid CTD data by 25 25 km cells"
 output: html_notebook
 ---
 
+This code was written by II for the manuscript: https://doi.org/10.1093/icesjms/fsae129
+This code is preceded by "Ocean data.Rmd" and followed by "Ocean regrid.Rmd"
+
 # Objective of code:
 the following code extracts CTD data for each re-gridded acoustic data cell (25km by 25km). This is different from Ocean data.rmd which processes all of the CTD data (visualizing profiles, smoothing data, calculating spice etc.) as well as Regrid.Rmd which re-gridded all of the acoustics data.
 

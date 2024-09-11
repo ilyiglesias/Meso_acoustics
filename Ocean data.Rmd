@@ -4,7 +4,7 @@ output: html_notebook
 ---
 
 This code was written by II for the manuscript: https://doi.org/10.1093/icesjms/fsae129
-This code is preceded by "Spatial autocorrelation.Rmd" and followed by "Ocean regrid"
+This code is preceded by "Analysis 1.Rmd" and followed by "Ocean regrid.Rmd"
 
 # Objective of code
 This project was created to load CTD data from the RREAS survey and to select those data corresponding to our acoustic tracks. These data will then be used to determine which environmental drivers might be responsible for affecting the acoustic Center of Mass (M) depth.
@@ -24,7 +24,7 @@ library(ggthemes)
 ```
 
 # Plot acoustic tracks
-We can create a simple plot of the location of our acoustic backscatter data from the echo_integration data Lat and Lon data which represents the center point of each 100m horizontal water column (from 150m-525m) of data. Note that this is prior to re-gridding into 25 by 25km grid cells 
+We can create a simple plot of the location of our acoustic backscatter data from the echo_integration data Lat and Lon data which represents the center point of each 100m horizontal water column (from 175m-675m) of data. Note that this is prior to re-gridding into 25 by 25km grid cells 
 
 ```{r plot acoustic tracks}
 
@@ -63,7 +63,7 @@ ggsave("./plots/cm_acoustic_track.pdf")
 ```
 
 # Load CTD data from RREA survey into R  
-These data are currently stored in the folder ctd_data
+These data are currently stored in a folder labeled ctd_data. To run the following code,download the CTD files from Dryad and store in a working directory under the same name. (dbo_CTD_HEADER.txt, dbo_CTD_CAST.txt, stations.csv)
 ```{r load CTD files}
 
 # Read ctd header info (ctd metadata)
@@ -125,7 +125,7 @@ ggplot()+
   facet_wrap(~year)+
   theme_classic()
 ```
-# Join the actual vertical CTD data (ctd_cast) to our metadata (ctd_header for 2013:2018)
+# Join vertical CTD data (ctd_cast) to our metadata (ctd_header for 2013:2018)
 
 The following adds all CTD oceanographic variables to our header data for ALL (regardelss of depth) 2013:2018 sites 
 
@@ -199,9 +199,9 @@ ggplot()+
 ```
 # Remove stations that were outside core region or beyond our range (too far offshore)
 - In 2016 there were 3 stations outside of our typical sampling range, which need to be removed. (Likewise I didn't analyze acoustics data from this far out in this year). 
-- in 2018 there are some additional outside regions to be removed 
+- Likewise for 2018 
 -Need to also remove these stations from our vertical data: ctd_deep_data
-- Would also like to restrict our geographic range of CTD samples to just be from the core region (defined as 36.45 to 38.33)
+- restrict our geographic range of CTD samples to just be from the core region (defined as 36.45 to 38.33)
 ```{r}
 # Remove stations from 2016 (195, 194, 193) and 2018 (182, 172, 162, 221) that were sampled far outside of our typical core region (didn't process acoustics out there either)
 ctd_deep_loc_core <- ctd_deep_loc %>%
@@ -242,8 +242,7 @@ ggplot()+
 ggsave(filename = "./plots/ctd/ctd_deeper_500.jpeg")
 ```
 # 25 km gridded data + acoustic track + CTD
-#E69F00
-#CC79A7
+
 ```{r}
 ggplot()+
   geom_sf(data=states, fill="grey", color="black")+# plot state basemap
@@ -268,8 +267,7 @@ ggsave(filename=paste0("./plots/regrid_coverage_", grid_size, "_map.pdf"), width
 ```
 
 # Plot position of CTDs with regridded acoustics data
-I regridded all of the acoustics data to a 25 by 25km grid. 
-Would like to visually look at these cells with CTD overlay
+regridded all of the acoustics data to a 25 by 25km grid with CTD overlay
 ```{r}
 ggplot()+
   geom_sf(data=states)+
@@ -425,7 +423,7 @@ rm(ctd_yr, ocean_variable, yr, yr_ctd_cast, i, j, k, ctd_cast_data)#remove itera
 
 # REMOVE bad CTD data
 
-Based on a visual inspection of all CTD profiles, I removed the following salinity and density data:
+Based on a visual inspection of all CTD profiles, remove the following salinity and density data:
 2015: cast 220 removed below 300m
 2017: cast 28 removed below 100m
 
@@ -450,7 +448,7 @@ ctd_deep_data_core$DENSITY[ctd_deep_data_core$year==2017 & ctd_deep_data_core$CT
 # CHLOROPHYLL-A : smoothing
 REFERENCES:https://www.r-bloggers.com/2014/01/smoothing-ctd-profiles/
 
-Calculated a moving average https://stackoverflow.com/questions/743812/calculating-moving-average stats::filter
+Calculated a moving average https://stackoverflow.com/questions/743812/calculating-moving-average 
 ```{r}
 ungroup(ctd_deep_data_core) 
 
@@ -487,40 +485,6 @@ ctd_deep_data_core$PRESSURE <- swPressure(depth=ctd_deep_data_core$CTD_DEPTH, la
 # Create a ctd object in {oce}-- ALL ctd casts
 ctd<- as.ctd(ctd_deep_data_core$SALINITY, ctd_deep_data_core$TEMPERATURE, ctd_deep_data_core$PRESSURE, longitude=ctd_deep_data_core$LONGITUDE, latitude= ctd_deep_data_core$LATITUDE)
 
-```
-
-
-# Calculate SPICE via {oce} package
-
-Compute seawater "spice", also called "spiciness" (a variable orthogonal to density in TS space), in either of two formulations, depending on the value of the eos argument. If eos="unesco" then Flament's (reference 1) formulation is used. If eos="gsw" then the Gibbs SeaWater formulation for "spiciness0" is used (see reference 2).
-
-https://rdrr.io/cran/oce/man/swSpice.html
-https://doi.org/10.1139/cjfas-2017-0480
-calculated spice at the 26.0 isopycnal 
-
-Steps to calculating spice:
-- Add col for potential temp
-- Add col for potential density
-- select for 26.0 potential density
-- calculate spice (both Flament's ("unesco"), or "gsw"= Gibbs SeaWater formulation)
-
-```{r calculate spice}
-#Add col for potential temperature
-ctd_deep_data_core$Potential_Temperature <- oce::swTheta(salinity = ctd_deep_data_core$SALINITY, temperature = ctd_deep_data_core$TEMPERATURE, pressure = ctd_deep_data_core$PRESSURE, referencePressure = 0, longitude = ctd_deep_data_core$LONGITUDE, latitude = ctd_deep_data_core$LATITUDE, eos = "gsw")
-  
-# Add col for potential density -- in situ temp (auto converted)-- note used Potential Temperature
-ctd_deep_data_core$Potential_Density <- oce::swRho(salinity = ctd_deep_data_core$SALINITY, temperature = ctd_deep_data_core$Potential_Temperature, pressure = ctd_deep_data_core$PRESSURE, longitude = ctd_deep_data_core$LONGITUDE, latitude = ctd_deep_data_core$LATITUDE, eos = "gsw")
-
-
-# Add col for Sigma theta (potential density anomaly)-- input in situ temp values
-ctd_deep_data_core$Sigma_theta <- oce::swSigmaTheta(salinity = ctd_deep_data_core$SALINITY, temperature = ctd_deep_data_core$TEMPERATURE, pressure = ctd_deep_data_core$PRESSURE, referencePressure=0, longitude = ctd_deep_data_core$LONGITUDE, latitude = ctd_deep_data_core$LATITUDE, eos = "gsw")
-
-# Add column for spice-- in situ temp: Gibbs SeaWater formulation
-ctd_deep_data_core$Spice_gibbs <- oce::swSpice(salinity = ctd_deep_data_core$SALINITY, temperature = ctd_deep_data_core$TEMPERATURE, pressure = ctd_deep_data_core$PRESSURE, longitude = ctd_deep_data_core$LONGITUDE, latitude = ctd_deep_data_core$LATITUDE, eos ="gsw") #Gibbs SeaWater formulation
-
-
-# Add column for spice-- in situ temp: Flament's formulation
-ctd_deep_data_core$Spice_flament <- oce::swSpice(salinity = ctd_deep_data_core$SALINITY, temperature = ctd_deep_data_core$TEMPERATURE, pressure = ctd_deep_data_core$PRESSURE, longitude = ctd_deep_data_core$LONGITUDE, latitude = ctd_deep_data_core$LATITUDE, eos ="unesco") # Flaments
 ```
 
 
