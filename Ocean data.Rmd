@@ -3,6 +3,9 @@ title: "Loading cleaning CTD data from RREA"
 output: html_notebook
 ---
 
+This code was written by II for the manuscript: https://doi.org/10.1093/icesjms/fsae129
+This code is preceded by "Spatial autocorrelation.Rmd" and followed by "Ocean regrid"
+
 # Objective of code
 This project was created to load CTD data from the RREAS survey and to select those data corresponding to our acoustic tracks. These data will then be used to determine which environmental drivers might be responsible for affecting the acoustic Center of Mass (M) depth.
 

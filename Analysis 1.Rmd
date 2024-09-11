@@ -4,10 +4,10 @@ output: html_notebook
 ---
 
 This code was written by II for the manuscript: https://doi.org/10.1093/icesjms/fsae129
-This code is preceded by "Spatial autocorrelation.Rmd" and followed by "Analysis 1.Rmd"
+This code is preceded by "Spatial autocorrelation.Rmd" and followed by "Ocean data.Rmd"
 
 # Objective of code
-Analysis 1: Are there differences in acosutically detected center of mass depth between years?! 
+Analysis 1: Are there differences in acoustically detected center of mass depth between years?! (2013-2018)
 
 # Background: 
 The following code analyzes whether there were any differences in acoustic backscatter and center of mass depth (m) BETWEEN years in our study. We are interested in inter annual differences AND at varying cell sizes (sensitivity analysis for different regridding sizes)
@@ -103,6 +103,7 @@ ggsave(filename=paste0("./plots/analysis 1/regrid_coverage_", grid_size, "_map.p
 ```
 25km: size=7.1
 20km: size= 5.2
+
 # Calculate median values for plotting 
 se=s/sqrt(n) where s= sample standard deviation and n=sample size. in our case, our units here are the # of grid cells per year
 ```{r}
@@ -189,7 +190,7 @@ ggsave(paste0("./plots/analysis 1/mvbs_bw_years_", grid_size, ".pdf"))
 ```
 
 
-Great little plot depicting the differences in the distribution of MVBS between years! 
+plot depicting the full distribution of MVBS values between years! 
 
 # Plot the distribution of CM between years
 ```{r}
@@ -243,6 +244,7 @@ p1+p2
 ggsave(paste0("./plots/analysis 1/cm_mvbs_dist_combo_", grid_size, ".pdf"), height=5, width=10, units = "in", dpi = 300)
 ```
 # EXPORT plot with black background
+This is just for reference
 ```{r}
 library(patchwork)
 
@@ -312,7 +314,7 @@ H1: At least one of the populations tends to yield larger observations than at l
 alt H1: The k populations do not all have identical means
 
 # convert year to a factor
-Not sure if this is patently required, but helps simplify structure 
+
 ```{r}
 # first ensure that year is a factor
 acoustic_regrid$year <- as.factor(acoustic_regrid$year)
@@ -345,11 +347,11 @@ kw_cm_25km=kw_cm
 If p-value <0.05 we can conclude that there are significant differences between groups (years). In order to know which pairs of years were different, we must further test with multiple comparisons.
 
 # MUTLIPLE COMPARISONS-- Kruskal Wallis 
-Although we know there are differences between years, we don't know between WHICH years these differences occur. To compare between groups (years) we thus additionally make pairwise comparisons.
+Although we know there are differences between years, we don't know between WHICH years these differences occur. To compare between groups (years) we thus additionally need to make pairwise comparisons.
 
 Background: "If, and only if the null hypothesis is rejected, we may we use the following procedure to determine which pairs of populations tend to differ" uses rank-sum Conover
 
-NOTE: default value for multiple comparisons is "BH" for Bejamini & Hochberg. see p.adjust for more info. Bonferonni is the most conservative option
+NOTE: default value for multiple comparisons is "BH" for Bejamini & Hochberg. see p.adjust for more info. Bonferonni conservative option
 
 #MANUAL
 ```{r mutliple comparisons kruskal wallis }
@@ -411,9 +413,8 @@ summary_year= summary_year |>
 #remove intermediary steps
 rm(kw_mc_cm_full, kw_mc_mvbs_full, table_cm, table_mvbs)
 ```
-NOTE: error message stating atomic vector error, but correctly added to df: summary_year so okay to proceed
 
-# Add output from multiple comparisons to boxplot
+# References on adding output from multiple comparisons to boxplot
 
 see https://r-graph-gallery.com/84-tukey-test a little complicated
 https://statdoe.com/one-way-anova-and-box-plot-in-r/
